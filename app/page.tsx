@@ -249,7 +249,7 @@ export default function Home() {
       </section>
 
       <footer>
-        <span>HerLit AI · 你的个人文学编辑部</span>
+        <span>HerLit AI · HerLit 的 AI 内容编辑系统</span>
         <span>阅读她们，也写下我们。</span>
       </footer>
     </main>
