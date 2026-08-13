@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="220" fill="#183d32"/>
+  <circle cx="512" cy="512" r="405" fill="none" stroke="#f4f0e8" stroke-width="8" opacity="0.72"/>
+  <circle cx="512" cy="512" r="360" fill="none" stroke="#f4f0e8" stroke-width="2" opacity="0.2"/>
+  <path d="M250 512h82m360 0h82" fill="none" stroke="#a4472f" stroke-width="7" stroke-linecap="round"/>
+  <path d="M281 493l19 19-19 19m462-38l-19 19 19 19" fill="none" stroke="#a4472f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="512" y="665" text-anchor="middle" fill="#f4f0e8" font-family="Bodoni MT, Didot, Baskerville, Palatino Linotype, Georgia, serif" font-size="500" font-style="normal" font-weight="400">H</text>
+</svg>

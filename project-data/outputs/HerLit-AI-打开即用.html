@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HerLit AI｜女性文学 AI 内容工作台</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css">
+  <style>
+    :root{--paper:#f4f0e8;--light:#fbf8f2;--ink:#1d2824;--green:#183d32;--dark:#102d25;--red:#a4472f;--muted:#6f756f;--line:rgba(29,40,36,.18)}
+    *{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:"LXGW WenKai Screen","Segoe UI","Microsoft YaHei",sans-serif}button,input,textarea{font:inherit}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 5% 18%,rgba(164,71,47,.08),transparent 28rem);z-index:-1}
+    header,.hero,.desk,footer{width:min(1160px,calc(100% - 40px));margin:auto}
+    header{height:92px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+    .brand{display:flex;align-items:center;gap:12px}.mark{width:42px;height:42px;display:grid;place-items:center;border:1px solid;border-radius:50%;font:italic 24px Georgia}
+    .brand b{display:block;font:19px Georgia}.brand small,.meta{color:var(--muted);font-size:11px;letter-spacing:.1em}.online{display:inline-block;width:7px;height:7px;margin-right:9px;border-radius:50%;background:#688b68;box-shadow:0 0 0 4px rgba(104,139,104,.14)}
+    .hero{padding:74px 0 62px}.eyebrow{color:var(--red);font-size:10px;font-weight:700;letter-spacing:.22em}.eyebrow:before{content:"";display:inline-block;width:34px;height:1px;background:var(--red);vertical-align:middle;margin-right:13px}
+    h1{margin:20px 0;font:500 clamp(47px,7vw,82px)/1.12 "LXGW WenKai Screen",Georgia,"Songti SC",serif;letter-spacing:-.04em}.hero p{margin-left:min(10vw,110px);color:#5d635e;line-height:1.9}
+    .desk{display:grid;grid-template-columns:minmax(0,1fr) 330px;background:rgba(251,248,242,.88);border:1px solid var(--line);box-shadow:0 28px 70px rgba(28,39,35,.09);margin-bottom:90px}
+    .form{padding:48px 54px}.heading{display:flex;gap:16px;margin-bottom:34px}.number{color:var(--red);font:12px Georgia}.heading h2{margin:0;font:500 29px Georgia,"Songti SC",serif}.heading p{margin:7px 0;color:var(--muted);font-size:12px}
+    label,fieldset{display:block;border:0;padding:0;margin:0 0 26px}.label{display:block;margin-bottom:9px;color:#59615c;font-size:11px;font-weight:700;letter-spacing:.12em}
+    input[type=date]{width:100%;padding:13px 0;border:0;border-bottom:1px solid;background:transparent;color:var(--ink);outline:none}
+    textarea{width:100%;min-height:94px;resize:vertical;padding:15px 17px;border:1px solid var(--line);background:#fffdf8;outline:none;font:17px/1.6 Georgia,"Songti SC",serif}textarea:focus,input:focus{border-color:var(--red)}
+    .styles{display:flex;flex-wrap:wrap;gap:8px}.chip{padding:9px 14px;border:1px solid var(--line);border-radius:99px;background:transparent;cursor:pointer;font-size:12px}.chip.on{background:var(--green);border-color:var(--green);color:#fff}
+    .generate{width:100%;min-height:58px;padding:0 20px;border:0;background:var(--red);color:white;display:flex;justify-content:space-between;align-items:center;cursor:pointer;font-weight:700;box-shadow:8px 8px #e2dbcf}.generate:hover{background:#903a27}.generate:disabled{opacity:.65}
+    .edition{position:relative;padding:40px 34px;background:var(--green);color:#f6f0e6}.edition-label{color:#b6c8bf;font-size:10px;letter-spacing:.2em}.date{display:flex;align-items:flex-end;gap:13px;margin:27px 0 53px}.date b{font:76px/.75 Georgia}.date span{color:#b9c8c0;font-size:12px}.edition blockquote{margin:0 0 18px;font:22px/1.65 Georgia,"Songti SC",serif}.edition>p{color:#b9c8c0;font-size:12px;line-height:1.7}.note{position:absolute;left:34px;right:34px;bottom:32px;padding-top:17px;border-top:1px solid rgba(255,255,255,.18);color:#afbeb7;font-size:11px;line-height:1.6}.note b{display:block;color:#dda896;margin-bottom:7px}
+    .results{padding:82px max(20px,calc((100vw - 1160px)/2)) 100px;background:var(--dark);color:#f4efe7}.results-head{display:flex;align-items:end;justify-content:space-between;margin-bottom:28px}.results-head small{color:#b78474;letter-spacing:.18em}.results-head h2{margin:7px 0 0;font:500 36px Georgia}.updated{color:#82918a;font-size:11px}
+    .shell{display:grid;grid-template-columns:150px minmax(0,1fr) 205px;min-height:610px}.tabs{border-right:1px solid rgba(255,255,255,.1)}.tab{width:100%;padding:18px 12px;border:0;border-bottom:1px solid rgba(255,255,255,.08);background:transparent;color:#91a198;text-align:left;cursor:pointer;font-size:12px}.tab.on{color:#fff;background:rgba(255,255,255,.06);box-shadow:inset 3px 0 var(--red)}
+    article{padding:37px clamp(28px,5vw,68px) 55px;background:var(--light);color:var(--ink)}.toolbar{display:flex;justify-content:space-between;padding-bottom:23px;margin-bottom:42px;border-bottom:1px solid var(--line)}.badge{padding:6px 9px;border:1px solid rgba(164,71,47,.3);color:var(--red);font-size:9px;letter-spacing:.15em}.copy{border:0;border-bottom:1px solid var(--line);background:none;color:var(--muted);cursor:pointer;font-size:11px}
+    .content{max-width:680px;margin:auto}.over{color:var(--red);font-size:10px;font-weight:700;letter-spacing:.13em}.content h3{margin:17px 0 24px;font:500 clamp(31px,4vw,46px)/1.3 "LXGW WenKai Screen",Georgia,"Songti SC",serif}.content p{color:#474e49;font:15px/2 "LXGW WenKai Screen",Georgia,"Songti SC",serif}.content .lead{color:#313c37;font-size:17px;font-weight:600}.quote{margin:27px 0;padding:7px 0 7px 20px;border-left:3px solid var(--red);color:var(--green);font:20px/1.7 "LXGW WenKai Screen",Georgia,"Songti SC",serif}.editor{padding:13px 15px;background:#eee8dd!important;color:#716d65!important;font:10px/1.6 "Segoe UI"!important}
+    .package{padding:30px 22px;background:#17372e}.package>small{color:#b78474;letter-spacing:.16em}.item{padding:14px 0;border-top:1px solid rgba(255,255,255,.09);color:#d5ded9;font-size:11px}.item:first-of-type{margin-top:20px}.item span{display:block;margin-top:5px;color:#758a80;font-size:9px}
+    .card-stage{display:grid;grid-template-columns:minmax(220px,360px) 1fr;gap:28px;align-items:center}.card-stage canvas{width:100%;height:auto;border:1px solid var(--line);box-shadow:0 18px 45px rgba(28,39,35,.14);background:#efe9de}.card-controls h4{margin:0 0 8px;font:24px Georgia,"Songti SC",serif}.card-controls p{font:13px/1.7 "Segoe UI";color:var(--muted)}.card-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}.card-actions button{padding:10px 13px;border:1px solid var(--line);background:#fffdf8;cursor:pointer;font-size:11px}.card-actions .download{background:var(--red);border-color:var(--red);color:#fff}.card-dots{margin-top:16px;color:var(--red);font-size:11px;letter-spacing:.18em}.hashtags{margin-top:25px;color:var(--red)!important;font:12px/1.8 "Segoe UI"!important}.hidden{display:none}
+    footer{display:flex;justify-content:space-between;padding:30px 0;color:var(--muted);font-size:11px}
+    @media(max-width:850px){.desk{grid-template-columns:1fr}.edition{min-height:510px}.shell{grid-template-columns:120px 1fr}.package{display:none}}
+    @media(max-width:600px){header,.hero,.desk,footer{width:calc(100% - 28px)}.meta{display:none}.hero{padding-top:52px}.hero p{margin-left:0}.form{padding:34px 23px}.shell{display:block}.tabs{display:flex;overflow:auto}.tab{min-width:120px}article{padding:28px 22px 45px}.results{padding-left:14px;padding-right:14px}.updated{display:none}.card-stage{grid-template-columns:1fr}.card-stage canvas{max-width:300px;margin:auto}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="mark">H</span><span><b>HerLit AI</b><small>女性文学 AI 内容工作台</small></span></div>
+    <div class="meta"><span class="online"></span>编辑部在线　·　第 1 阶段 · 离线模拟</div>
+  </header>
+  <section class="hero">
+    <div class="eyebrow">XIAOHONGSHU LITERARY STUDIO</div>
+    <h1>每天一篇文字，<br>让女性文学被看见。</h1>
+    <p>HerLit 为你准备小红书正文、标题标签与 3:4 图文卡片。<br>AI 完成初稿，你审核后发布。</p>
+  </section>
+  <section class="desk">
+    <div class="form">
+      <div class="heading"><span class="number">01</span><div><h2>今天想写什么？</h2><p>给编辑部一个清晰的起点</p></div></div>
+      <label><span class="label">发布日期</span><input id="date" type="date" value="2026-07-30"></label>
+      <label><span class="label">内容主题</span><textarea id="topic">女性如何夺回自己的叙事</textarea></label>
+      <fieldset><legend class="label">表达风格</legend><div class="styles">
+        <button class="chip on">克制 · 文学</button><button class="chip">温柔 · 叙事</button><button class="chip">锐利 · 评论</button><button class="chip">轻盈 · 社交</button>
+      </div></fieldset>
+      <button class="generate" id="generate"><span>生成小红书图文包</span><span>↗</span></button>
+    </div>
+    <aside class="edition">
+      <div class="edition-label">TODAY’S EDITION</div>
+      <div class="date"><b id="day">30</b><span id="month">JUL<br>2026</span></div>
+      <blockquote>“一个女人必须有钱和一间属于自己的房间。”</blockquote>
+      <p>— 弗吉尼亚·伍尔夫<br><i>A Room of One’s Own</i>, 1929</p>
+      <div class="note"><b>编辑提示</b>真实 AI 接入后，日期、原文与引语出处会先核验，再进入写作。</div>
+    </aside>
+  </section>
+  <section class="results">
+    <div class="results-head"><div><small>DRAFT DESK</small><h2>今日内容包</h2></div><span class="updated" id="updated">最后更新 · 今天 08:30</span></div>
+    <div class="shell">
+      <nav class="tabs"><button class="tab on" data-tab="brief">01　小红书正文</button><button class="tab" data-tab="writer">02　作家资料卡</button><button class="tab" data-tab="cards">03　配图卡片</button></nav>
+      <article>
+        <div class="toolbar"><span class="badge">模拟初稿</span><button class="copy" id="copy">复制全文</button></div>
+        <div class="content" id="brief">
+          <div class="over" id="dateText">2026年7月30日 · 今日小红书图文</div>
+          <h3>一个女人真正开始写作，要先拥有一间房吗？</h3>
+          <p class="lead">今天，我们从“<span class="topicText">女性如何夺回自己的叙事</span>”重新走近弗吉尼亚·伍尔夫。</p>
+          <p>她写下的不只是女性需要一间房，更是一个创作者必须拥有的条件：不被打断的时间、不被解释的欲望，以及把自己的经验视为值得书写之物的勇气。</p>
+          <p>近一个世纪后，这句话仍然提醒我们：创作从来不只关乎灵感。它也关乎空间、资源，以及一个人是否被允许完整地成为自己。</p>
+          <div class="quote">“真正的自由，也许始于不再为自己的声音请求许可。”</div>
+          <p class="hashtags">#女性文学　#女性作家　#弗吉尼亚伍尔夫　#阅读分享　#女性成长</p>
+          <p class="editor"><b>编辑注：</b>此页为第一阶段界面演示。真实生成上线后，事实与引语会在交付前完成来源核验。</p>
+        </div>
+        <div class="content hidden" id="writer">
+          <div class="over">WRITER FOCUS · 作家专题</div><h3>弗吉尼亚·伍尔夫<br><i style="font-size:.55em;color:#6f756f">Virginia Woolf</i></h3>
+          <p class="lead">1882—1941 · 意识流 · 空间 · 女性写作</p>
+          <p>她把意识中最微小的波纹带进小说，也把“谁有资格写作”变成一项无法回避的公共追问。</p>
+          <div class="quote"><i>Mrs Dalloway</i>（1925）<br><i>To the Lighthouse</i>（1927）<br><i>A Room of One’s Own</i>（1929）</div>
+        </div>
+        <div class="content hidden" id="cards">
+          <div class="over">XIAOHONGSHU CAROUSEL · 3:4</div><h3>可直接保存的图文卡片</h3>
+          <div class="card-stage">
+            <canvas id="cardCanvas" width="1080" height="1440" aria-label="小红书图文卡片预览"></canvas>
+            <div class="card-controls"><h4 id="cardName">封面 · 01</h4><p>封面、核心观点与作品推荐使用同一套视觉系统。真实生成阶段会根据当天内容自动排版。</p><div class="card-actions"><button id="prevCard">上一张</button><button id="nextCard">下一张</button><button class="download" id="downloadCard">保存当前图片</button></div><div class="card-dots" id="cardDots">●　○　○</div></div>
+          </div>
+        </div>
+      </article>
+      <aside class="package"><small>今日发布包</small><div class="item">小红书正文<span>已完成</span></div><div class="item">3 个标题备选<span>已完成</span></div><div class="item">标签建议<span>已完成</span></div><div class="item">事实与引语<span>待核验</span></div><div class="item">3:4 封面卡片<span>可保存</span></div><div class="item">人工审核<span>发布前必须</span></div></aside>
+    </div>
+  </section>
+  <footer><span>HerLit AI · 你的个人文学编辑部</span><span>阅读她们，也写下我们。</span></footer>
+  <script>
+    const date=document.querySelector("#date"),topic=document.querySelector("#topic"),generate=document.querySelector("#generate");
+    let selectedStyle="克制 · 文学";
+    document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{document.querySelectorAll(".chip").forEach(x=>x.classList.remove("on"));b.classList.add("on");selectedStyle=b.textContent});
+    document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));b.classList.add("on");["brief","writer","cards"].forEach(id=>document.querySelector("#"+id).classList.toggle("hidden",id!==b.dataset.tab))});
+    date.onchange=()=>{const d=new Date(date.value+"T00:00:00");document.querySelector("#day").textContent=String(d.getDate()).padStart(2,"0");document.querySelector("#month").innerHTML=d.toLocaleString("en",{month:"short"}).toUpperCase()+"<br>"+d.getFullYear()};
+    generate.onclick=()=>{generate.disabled=true;generate.firstElementChild.textContent="编辑部正在准备图文…";setTimeout(()=>{document.querySelectorAll(".topicText").forEach(x=>x.textContent=topic.value);const d=new Date(date.value+"T00:00:00");document.querySelector("#dateText").textContent=`${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 · 今日小红书图文`;document.querySelector("#updated").textContent="最后更新 · "+new Date().toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit",hour12:false});drawCard();generate.disabled=false;generate.firstElementChild.textContent="生成小红书图文包"},800)};
+    document.querySelector("#copy").onclick=async e=>{const visible=[...document.querySelectorAll(".content")].find(x=>!x.classList.contains("hidden"));await navigator.clipboard.writeText(visible.innerText);e.target.textContent="已复制 ✓";setTimeout(()=>e.target.textContent="复制全文",1300)};
+    const canvas=document.querySelector("#cardCanvas"),ctx=canvas.getContext("2d");let cardIndex=0;
+    const cardData=[{name:"封面 · 01",kicker:"HERLIT · 今日女性文学",title:["一个女人", "真正开始写作，", "要先拥有一间房吗？"],foot:"Virginia Woolf · 1929"},{name:"观点 · 02",kicker:"A ROOM OF ONE’S OWN",title:["创作不只关乎灵感。", "它也关乎空间、时间，", "以及不必为野心道歉。"],foot:"阅读她们，也写下我们。"},{name:"书单 · 03",kicker:"从这里开始读伍尔夫",title:["《达洛维夫人》", "《到灯塔去》", "《一间自己的房间》"],foot:"收藏这份女性文学书单"}];
+    function drawCard(){const c=cardData[cardIndex],green="#183d32",paper="#f4f0e8",red="#a4472f";ctx.fillStyle=paper;ctx.fillRect(0,0,1080,1440);ctx.fillStyle=green;ctx.fillRect(70,70,940,1300);ctx.strokeStyle="#d9cdbb";ctx.lineWidth=2;ctx.strokeRect(104,104,872,1232);ctx.fillStyle="#b78474";ctx.font="700 24px 'LXGW WenKai Screen', Segoe UI";ctx.letterSpacing="4px";ctx.fillText(c.kicker,145,190);ctx.fillStyle="#f8f1e7";ctx.font="56px 'LXGW WenKai Screen', Microsoft YaHei";c.title.forEach((line,i)=>ctx.fillText(line,145,470+i*105));ctx.fillStyle=red;ctx.fillRect(145,850,90,7);ctx.fillStyle="#b9c8c0";ctx.font="26px 'LXGW WenKai Screen', Microsoft YaHei";ctx.fillText(c.foot,145,1190);ctx.font="italic 34px Georgia";ctx.fillStyle="#f8f1e7";ctx.fillText("HerLit AI",145,1260);document.querySelector("#cardName").textContent=c.name;document.querySelector("#cardDots").textContent=cardData.map((_,i)=>i===cardIndex?"●":"○").join("　")}
+    document.querySelector("#prevCard").onclick=()=>{cardIndex=(cardIndex+cardData.length-1)%cardData.length;drawCard()};document.querySelector("#nextCard").onclick=()=>{cardIndex=(cardIndex+1)%cardData.length;drawCard()};document.querySelector("#downloadCard").onclick=()=>{const a=document.createElement("a");a.download=`HerLit-小红书卡片-${cardIndex+1}.png`;a.href=canvas.toDataURL("image/png");a.click()};drawCard();if(document.fonts)document.fonts.ready.then(drawCard);
+  </script>
+</body>
+</html>

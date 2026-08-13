@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="220" fill="#183d32"/>
+  <circle cx="512" cy="512" r="405" fill="none" stroke="#f4f0e8" stroke-width="8" opacity="0.72"/>
+  <circle cx="512" cy="512" r="360" fill="none" stroke="#f4f0e8" stroke-width="2" opacity="0.2"/>
+  <text x="512" y="660" text-anchor="middle" fill="#f4f0e8" font-family="Georgia, Times New Roman, serif" font-size="500" font-style="italic" font-weight="400">H</text>
+  <rect x="697" y="690" width="142" height="142" rx="18" fill="#a4472f" transform="rotate(-7 768 761)"/>
+  <rect x="716" y="709" width="104" height="104" rx="9" fill="none" stroke="#f4f0e8" stroke-width="7" transform="rotate(-7 768 761)"/>
+  <text x="768" y="792" text-anchor="middle" fill="#f4f0e8" font-family="SimSun, Songti SC, serif" font-size="72" font-weight="700" transform="rotate(-7 768 761)">她</text>
+</svg>
