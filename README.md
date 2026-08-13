@@ -22,15 +22,16 @@
 ```text
 发布日期 + 可选编辑干预
   → 候选发现与评分（3–5 人）
-  → Today's Pick + Why Her Today
-  → Research Pack
+  → EditorialSelectionResult + Proposed Why Her Today
+  → Evidence Leads → Research Claims
   → Verification
+  → Verified Why Her Today
   → Reader Value Modules（2–3 个）
   → 小红书审核稿 + Growth Notes + 卡片方案（3–6 张）
   → 人工审核
 ```
 
-Research 与写作严格分离：正文生成阶段只能使用已进入 Research Pack 且通过核验的信息。找不到权威出处的引语必须省略；柔性日期关联必须明确标记为 editorial link。
+Selection、Research 与写作严格分离：Selection 只能提出待核验 Evidence Leads，不能生成 Research Claim ID；Research 创建并核验正式 claims；正文生成阶段只能使用已核验的 Why Her Today 与 Research Claims。找不到权威出处的引语必须省略；柔性日期关联必须明确标记为 editorial link。
 
 ## 目录结构
 

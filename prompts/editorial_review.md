@@ -6,7 +6,7 @@
 
 ## 事实与边界检查
 
-- Why Her Today 是否由对应的已核验 claims 支撑。
+- `VerifiedWhyHerToday` 是否由对应的已核验 claims 支撑，且没有把 Selection 的 Evidence Lead 当成事实证据。
 - 是否把当月或季节 editorial link 伪装成确切历史事件。
 - 姓名、日期、作品原名、首版年份、奖项、事件与关系是否逐项有依据。
 - 所有引语是否有可靠出处，且没有把人物台词变成作者名言。

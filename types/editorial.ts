@@ -40,7 +40,26 @@ export type RelationType =
 
 export type DateRelevanceTier = "A" | "B" | "C";
 
-export type WhyHerToday = {
+export type EvidenceLead = {
+  /** Selection-local identifier. It is not a ResearchClaim.id. */
+  id: string;
+  description: string;
+  expectedSourceType?: ResearchSourceType;
+  searchHint?: string;
+};
+
+export type ProposedWhyHerToday = {
+  relationType: RelationType;
+  relationDate?: string;
+  tier: DateRelevanceTier;
+  isEditorialLink: boolean;
+  shortReason: string;
+  editorExplanation: string;
+  /** Unverified leads for Research to investigate. */
+  evidenceLeads: EvidenceLead[];
+};
+
+export type VerifiedWhyHerToday = {
   relationType: RelationType;
   relationDate?: string;
   tier: DateRelevanceTier;
@@ -59,15 +78,23 @@ export type CandidateScore = {
   readerValue: number;
   growthPotential: number;
   herlitDistinctiveness: number;
-  /** A 0–100 deduction applied after the positive dimensions. */
+  /**
+   * A 0–100 program-owned deduction derived from recent editorial history.
+   * Providers and models must not invent this value.
+   */
   recentRepeatPenalty: number;
+  /**
+   * Deterministically calculated by application code from the dimensions and
+   * recentRepeatPenalty. Models must not supply or estimate this value. Step 2
+   * will define the exact weights and formula.
+   */
   weightedTotal: number;
 };
 
 export type Candidate = {
   id: string;
   writer: WriterSummary;
-  whyHerToday: WhyHerToday;
+  proposedWhyHerToday: ProposedWhyHerToday;
   score: CandidateScore;
   rank: number;
   editorialReason: string;
@@ -86,6 +113,18 @@ export type SelectionDecision = {
     candidateId: string;
     reason: string;
   }>;
+};
+
+export type EditorialSelectionResult = {
+  date: string;
+  candidateShortlist: CandidateShortlist;
+  selectionDecision: SelectionDecision;
+  /**
+   * Must be the shortlist member whose id equals
+   * selectionDecision.selectedCandidateId. Step 2 will enforce this invariant
+   * when it assembles the result.
+   */
+  selectedCandidate: Candidate;
 };
 
 export type ResearchClaimCategory =
@@ -122,18 +161,40 @@ export type VerifiedResearchClaim = Omit<ResearchClaim, "verified"> & {
   verified: true;
 };
 
-export type ResearchPack = {
+export type EvidenceLeadResolution = {
+  evidenceLeadId: string;
+  status: "verified" | "needs_review" | "rejected";
+  /** ResearchClaim ids created during Research; never Selection lead ids. */
+  researchClaimIds: string[];
+  note?: string;
+};
+
+type ResearchPackBase = {
   candidateId: string;
   writer: WriterSummary;
-  whyHerToday: WhyHerToday;
+  proposedWhyHerToday: ProposedWhyHerToday;
+  evidenceLeadResolutions: EvidenceLeadResolution[];
   claims: ResearchClaim[];
   verification: {
     passedClaimIds: string[];
     needsReviewClaimIds: string[];
     rejectedClaimIds: string[];
   };
-  readyForDraft: boolean;
 };
+
+export type ResearchPack = ResearchPackBase &
+  (
+    | {
+        readyForDraft: false;
+        /** May exist when the date link passed but other required claims did not. */
+        verifiedWhyHerToday?: VerifiedWhyHerToday;
+      }
+    | {
+        readyForDraft: true;
+        /** Required before any DraftRequest can be assembled. */
+        verifiedWhyHerToday: VerifiedWhyHerToday;
+      }
+  );
 
 export type ValueModuleType =
   | "where_to_start"
@@ -197,7 +258,7 @@ export type DailyEditorialPackage = {
   candidateShortlist: CandidateShortlist;
   selectedWriter: WriterSummary;
   selectionDecision: SelectionDecision;
-  whyHerToday: WhyHerToday;
+  whyHerToday: VerifiedWhyHerToday;
   editorialAngle: string;
   readerHook: string;
   researchClaims: ResearchClaim[];
@@ -219,7 +280,7 @@ export type DraftRequest = {
   candidateShortlist: CandidateShortlist;
   selectedWriter: WriterSummary;
   selectionDecision: SelectionDecision;
-  whyHerToday: WhyHerToday;
+  whyHerToday: VerifiedWhyHerToday;
   verifiedClaims: VerifiedResearchClaim[];
   valueModules: ValueModuleCollection;
   style?: string | null;
