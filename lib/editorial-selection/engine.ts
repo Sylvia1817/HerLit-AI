@@ -148,7 +148,14 @@ export function assertSelectionResult(
   if (shortlist.length < 3 || shortlist.length > 5) {
     throw new Error("Selection result must contain 3–5 candidates");
   }
+  const candidateIds = shortlist.map(({ id }) => id);
+  if (new Set(candidateIds).size !== candidateIds.length) {
+    throw new Error("Candidate shortlist must contain unique candidate IDs");
+  }
   shortlist.forEach((candidate, index) => {
+    if (!isQualifiedCandidate(candidate)) {
+      throw new Error(`Candidate ${candidate.id} does not meet qualification gates`);
+    }
     if (candidate.rank !== index + 1) {
       throw new Error(`Candidate ${candidate.id} has an invalid rank`);
     }
@@ -160,18 +167,22 @@ export function assertSelectionResult(
     }
   });
 
+  const selectedCandidateId = result.selectionDecision.selectedCandidateId;
   if (
-    result.selectedCandidate.id !==
-    result.selectionDecision.selectedCandidateId
+    selectedCandidateId !== result.selectedCandidate.id ||
+    selectedCandidateId !== shortlist[0].id
   ) {
-    throw new Error("selectedCandidateId does not match selectedCandidate.id");
+    throw new Error(
+      "selectedCandidateId, selectedCandidate.id and candidateShortlist[0].id must match",
+    );
   }
-
-  const shortlistMember = shortlist.find(
-    (candidate) => candidate.id === result.selectedCandidate.id,
-  );
-  if (!shortlistMember || shortlistMember !== result.selectedCandidate) {
-    throw new Error("selectedCandidate must be a member of candidateShortlist");
+  if (
+    shortlist.filter(({ id }) => id === selectedCandidateId).length !== 1
+  ) {
+    throw new Error("Selected candidate ID must occur exactly once in shortlist");
+  }
+  if (result.selectedCandidate.rank !== 1 || shortlist[0].rank !== 1) {
+    throw new Error("Selected candidate must have rank 1");
   }
 
   const expectedAlternatives = new Set(shortlist.slice(1).map(({ id }) => id));
@@ -205,6 +216,7 @@ export class DailyEditorialSelectionEngine {
       request.date,
       EDITORIAL_HISTORY_WINDOW_DAYS,
     );
+    const excludedWriterIds = new Set(request.excludeWriterIds ?? []);
     const proposalsByWriter = new Map<string, CandidateProposal>();
     let candidates: Candidate[] = [];
 
@@ -212,6 +224,9 @@ export class DailyEditorialSelectionEngine {
       const discovered = await this.candidateProvider.discover(request, tier);
 
       for (const proposal of discovered) {
+        if (excludedWriterIds.has(proposal.writer.id)) {
+          continue;
+        }
         assertProposal(proposal, tier, this.candidateProvider);
         if (!proposalsByWriter.has(proposal.writer.id)) {
           proposalsByWriter.set(proposal.writer.id, proposal);
@@ -243,13 +258,17 @@ export class DailyEditorialSelectionEngine {
       }
     }
 
-    if (candidates.length < 3) {
+    const qualifiedCandidates = candidates.filter(isQualifiedCandidate);
+    if (
+      qualifiedCandidates.length <
+      CANDIDATE_QUALIFICATION.minQualifiedCandidates
+    ) {
       throw new Error(
-        "Candidate providers returned fewer than three candidates after Tier C",
+        "Selection requires at least three qualified candidates after Tier C",
       );
     }
 
-    const ranked = rankCandidates(candidates);
+    const ranked = rankCandidates(qualifiedCandidates);
     const candidateShortlist = toCandidateShortlist(ranked.slice(0, 5));
     const selectionDecision = buildSelectionDecision(candidateShortlist);
     const result: EditorialSelectionResult = {

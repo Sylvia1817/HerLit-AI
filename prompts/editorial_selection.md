@@ -7,7 +7,7 @@
 ## 输入
 
 - 必填：`date`
-- 选填：`topic`、`candidateWriter`、`style`、`excludeWriters`
+- 选填：`topic`、`candidateWriter`、`style`、`excludeWriterIds`
 
 除 `date` 外，所有字段都只是编辑干预。没有主题或指定人物时也必须正常运行。
 
@@ -56,6 +56,8 @@ Tier C 必须设置 `isEditorialLink: true`，并在读者理由与编辑说明�
 
 - `date` 为本次发布日期。
 - `candidateShortlist` 包含 3–5 位候选，并在程序计算总分后排序。
+- `candidateShortlist` 只能包含通过全部硬门槛的合格候选；Tier C 后仍不足 3 位时明确失败，不得用弱候选补位。
+- `excludeWriterIds` 是程序硬约束；provider 返回的排除人物也不得进入评分或 shortlist。
 - `selectionDecision` 说明为什么选她，以及为什么没有选其余每一位候选。
 - `selectedCandidate` 必须是 shortlist 中 `id === selectionDecision.selectedCandidateId` 的同一候选。
 - 每位候选的事实风险与待核验项。

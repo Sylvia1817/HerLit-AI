@@ -13,6 +13,7 @@ import {
   MockEditorialHistoryProvider,
   assertSelectionResult,
   calculateCandidateScore,
+  isQualifiedCandidate,
 } from "../lib/editorial-selection/index.ts";
 import type {
   EditorialHistoryEntry,
@@ -227,6 +228,102 @@ test("Case C: five weak Tier A candidates still trigger Tier B fallback", async 
   ]);
   assert.equal(result.selectedCandidate.proposedWhyHerToday.tier, "B");
   assert.ok(result.candidateShortlist.length >= 3);
+  assert.ok(result.candidateShortlist.every(isQualifiedCandidate));
+});
+
+test("a high total cannot bypass a failed source-availability gate", async () => {
+  const date = "2026-03-19";
+  const { engine } = createEngine({
+    [date]: {
+      A: [
+        candidateFixture("hard-fail-source", "A", {
+          signals: {
+            dateRelevance: 100,
+            sourceAvailability: 0,
+            recognition: 100,
+            storyTension: 100,
+            readerValue: 100,
+            growthPotential: 100,
+            herlitDistinctiveness: 100,
+          },
+        }),
+        candidateFixture("qualified-1", "A"),
+        candidateFixture("qualified-2", "A"),
+        candidateFixture("qualified-3", "A"),
+      ],
+    },
+  });
+
+  const result = await engine.select({ date });
+
+  assert.ok(
+    result.candidateShortlist.every(({ id }) => id !== "hard-fail-source"),
+  );
+  assert.notEqual(result.selectedCandidate.id, "hard-fail-source");
+  assert.ok(result.candidateShortlist.every(isQualifiedCandidate));
+});
+
+test("Tier C fails explicitly when only two candidates qualify", async () => {
+  const date = "2026-03-20";
+  const weakSignals: Partial<CandidateSignals> = {
+    sourceAvailability: 20,
+  };
+  const { candidateProvider, engine } = createEngine({
+    [date]: {
+      A: [candidateFixture("weak-a", "A", { signals: weakSignals })],
+      B: [candidateFixture("qualified-1", "B")],
+      C: [
+        candidateFixture("qualified-2", "C"),
+        candidateFixture("weak-c", "C", { signals: weakSignals }),
+      ],
+    },
+  });
+
+  await assert.rejects(
+    engine.select({ date }),
+    /at least three qualified candidates after Tier C/,
+  );
+  assert.deepEqual(candidateProvider.calls, [
+    { date, tier: "A" },
+    { date, tier: "B" },
+    { date, tier: "C" },
+  ]);
+});
+
+test("excluded writer IDs remain excluded when the provider returns them", async () => {
+  const date = "2026-03-21";
+  const excluded = candidateFixture("excluded-top", "A", {
+    signals: {
+      dateRelevance: 100,
+      sourceAvailability: 100,
+      recognition: 100,
+      storyTension: 100,
+      readerValue: 100,
+      growthPotential: 100,
+      herlitDistinctiveness: 100,
+    },
+  });
+  const { engine } = createEngine({
+    [date]: {
+      A: [
+        excluded,
+        candidateFixture("included-1", "A"),
+        candidateFixture("included-2", "A"),
+        candidateFixture("included-3", "A"),
+      ],
+    },
+  });
+
+  const result = await engine.select({
+    date,
+    excludeWriterIds: [excluded.writer.id],
+  });
+
+  assert.ok(
+    result.candidateShortlist.every(
+      ({ writer }) => writer.id !== excluded.writer.id,
+    ),
+  );
 });
 
 test("Case D: Tier C requires an explicit editorial link", async () => {
@@ -370,7 +467,7 @@ test("Case G: a less famous but stronger HerLit story can outrank fame", async (
   );
 });
 
-test("runtime invariant rejects a selectedCandidate/decision mismatch", async () => {
+test("runtime invariant is transport-safe and rejects ID inconsistencies", async () => {
   const date = "2026-07-07";
   const { engine } = createEngine({
     [date]: {
@@ -383,12 +480,22 @@ test("runtime invariant rejects a selectedCandidate/decision mismatch", async ()
   });
   const result = await engine.select({ date });
 
+  assert.doesNotThrow(() => assertSelectionResult(structuredClone(result)));
+
   assert.throws(
     () =>
       assertSelectionResult({
         ...result,
         selectedCandidate: result.candidateShortlist[1],
       }),
-    /selectedCandidateId does not match selectedCandidate.id/,
+    /selectedCandidateId, selectedCandidate.id and candidateShortlist\[0\].id must match/,
+  );
+
+  const duplicateIds = structuredClone(result);
+  duplicateIds.candidateShortlist[1].id =
+    duplicateIds.candidateShortlist[0].id;
+  assert.throws(
+    () => assertSelectionResult(duplicateIds),
+    /unique candidate IDs/,
   );
 });

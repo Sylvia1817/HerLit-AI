@@ -24,7 +24,7 @@ editorial_selection.md
 
 ## 运行原则
 
-- `date` 是唯一必填输入；`topic`、`candidateWriter`、`style`、`excludeWriters` 都只是编辑干预。
+- `date` 是唯一必填输入；`topic`、`candidateWriter`、`style`、`excludeWriterIds` 都只是编辑干预，其中排除 ID 是引擎必须执行的硬约束。
 - 每段输出都应是结构化数据，阶段之间不传递隐藏推理。
 - Selection 只输出 Evidence Leads；Evidence Lead ID 不是 Research Claim ID。
 - Research 创建正式 claims；只有核验后的 Why Her Today 才引用 `evidenceClaimIds`。

@@ -17,7 +17,8 @@ export type EditorialRequest = {
   topic?: string | null;
   candidateWriter?: string | null;
   style?: string | null;
-  excludeWriters?: string[];
+  /** Writer IDs that the Selection Engine must exclude after provider discovery. */
+  excludeWriterIds?: string[];
 };
 
 export type WriterSummary = {
