@@ -23,7 +23,7 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - 将旧单体 prompt 拆为选题、研究核验、价值模块、写作和编辑复核五段。
 - 保持现有页面可构建；本步骤不接真实数据。
 
-### Step 1.1：Selection → Research 数据契约（当前）
+### Step 1.1：Selection → Research 数据契约（已完成）
 
 - Selection 使用 `ProposedWhyHerToday.evidenceLeads` 表达待核验依据，不生成 Research Claim ID。
 - Research 把 leads 转成正式 claims；通过 Verification 后才生成引用 `evidenceClaimIds` 的 `VerifiedWhyHerToday`。
@@ -31,7 +31,7 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - `recentRepeatPenalty` 和 `weightedTotal` 均由程序确定性计算；具体权重与公式留到 Step 2。
 - 本步骤只修复类型与 Prompt 契约，不实现候选算法、provider、API、搜索或真实执行。
 
-### Step 2：每日候选与选题决策
+### Step 2：每日候选与选题决策（已实现，待 review）
 
 - 支持只输入日期运行；主题、指定人物、风格与排除人物均为可选编辑干预。
 - 按当天强关联、当月强关联、编辑型柔性关联逐层发现候选。
@@ -39,6 +39,7 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - 确定候选维度权重、近期重复扣分与 `weightedTotal` 的程序计算公式。
 - 输出 Today's Pick、独立 Why Her Today，以及“为什么选她而没有选其他人”。
 - 初期允许 provider/mock，但必须明确标识。
+- 当前实现使用可复现 mock candidate/history provider；尚未接入互联网检索或真实 Research。
 
 ### Step 3：Research Pack 与 Verification
 

@@ -24,7 +24,7 @@ Tier C 必须设置 `isEditorialLink: true`，并在读者理由与编辑说明�
 对每位候选分别给出 0–100 分：
 
 - `dateRelevance`
-- `sourceConfidence`
+- `sourceAvailability`（只表示进入 Research 前的优质来源可得性，不是事实 confidence）
 - `recognition`
 - `storyTension`
 - `readerValue`
@@ -34,13 +34,13 @@ Tier C 必须设置 `isEditorialLink: true`，并在读者理由与编辑说明�
 
 知名度不能成为唯一决定因素。近期重复会降低总分；故事、读者价值与 HerLit 女性文学视角足够强时，冷门人物可以战胜更知名但内容平庸的候选。
 
-`recentRepeatPenalty` 与 `weightedTotal` 都是程序所有字段，不由模型填写：
+模型/provider 只提供 `CandidateSignals`。`recentRepeatPenalty`、`weightedBase` 与 `weightedTotal` 都是程序所有字段，不由模型填写：
 
 - `recentRepeatPenalty` 由程序根据近期编辑历史计算并作为扣分项。
-- `weightedTotal` 由程序按照确定性公式计算，具体权重在 Step 2 定义。
+- `weightedBase` 与 `weightedTotal` 由程序按照集中定义的确定性权重计算。
 - 不得凭感觉生成看似精确的总分，例如 `87.4`。
 
-如果本 Prompt 用于提供候选维度输入，模型只评估有编辑语义的维度；最终 `CandidateScore` 和排序由 Step 2 程序组装。本阶段不实现该算法。
+如果本 Prompt 用于提供候选维度输入，模型只评估有编辑语义的 `CandidateSignals`；最终 `CandidateScore`、扣分与排序由 Selection Engine 组装。
 
 ## Why Her Today 门槛
 

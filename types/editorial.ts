@@ -69,15 +69,21 @@ export type VerifiedWhyHerToday = {
   evidenceClaimIds: string[];
 };
 
-export type CandidateScore = {
-  /** All positive dimensions use a 0–100 scale. */
+export type CandidateSignals = {
+  /** All preliminary Selection signals use a 0–100 scale. */
   dateRelevance: number;
-  sourceConfidence: number;
+  /** Preliminary availability of high-quality sources, not claim confidence. */
+  sourceAvailability: number;
   recognition: number;
   storyTension: number;
   readerValue: number;
   growthPotential: number;
   herlitDistinctiveness: number;
+};
+
+export type CandidateScore = {
+  /** Deterministic weighted sum of CandidateSignals before deductions. */
+  weightedBase: number;
   /**
    * A 0–100 program-owned deduction derived from recent editorial history.
    * Providers and models must not invent this value.
@@ -91,11 +97,18 @@ export type CandidateScore = {
   weightedTotal: number;
 };
 
+export type CandidateProvenance = {
+  providerId: string;
+  providerMode: "mock" | "live";
+};
+
 export type Candidate = {
   id: string;
   writer: WriterSummary;
   proposedWhyHerToday: ProposedWhyHerToday;
+  signals: CandidateSignals;
   score: CandidateScore;
+  provenance: CandidateProvenance;
   rank: number;
   editorialReason: string;
   risks: string[];
