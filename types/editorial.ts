@@ -2,7 +2,7 @@
  * Phase 2 editorial domain contracts.
  *
  * These types describe the intended data boundaries. They do not imply that
- * the candidate, research or draft APIs are implemented yet.
+ * external APIs or live providers are implemented.
  */
 
 export const EDITORIAL_LIMITS = {
@@ -92,8 +92,8 @@ export type CandidateScore = {
   recentRepeatPenalty: number;
   /**
    * Deterministically calculated by application code from the dimensions and
-   * recentRepeatPenalty. Models must not supply or estimate this value. Step 2
-   * will define the exact weights and formula.
+   * recentRepeatPenalty using the centralized Step 2 formula. Models must not
+   * supply or estimate this value.
    */
   weightedTotal: number;
 };
@@ -158,21 +158,65 @@ export type ResearchSourceType =
   | "reputable_media"
   | "secondary";
 
+export type ResearchProviderMode = "mock" | "live";
+
+export type ResearchSource = {
+  id: string;
+  url: string;
+  title: string;
+  publisher?: string;
+  sourceType: ResearchSourceType;
+  retrievedAt: string;
+  providerId: string;
+  providerMode: ResearchProviderMode;
+};
+
+export type ClaimEvidence = {
+  sourceId: string;
+  support: "direct" | "indirect" | "contradicts";
+  locator?: string;
+  excerpt?: string;
+};
+
+export type QuoteContext = {
+  speakerType:
+    | "author"
+    | "narrator"
+    | "character"
+    | "letter"
+    | "diary"
+    | "speech"
+    | "interview";
+  /** Program-readable attribution finding; models cannot override policy. */
+  attributionStatus: "confirmed" | "misattributed" | "uncertain";
+  workOrDocument?: string;
+  locator?: string;
+};
+
+export type ResearchVerificationStatus =
+  | "verified"
+  | "needs_review"
+  | "rejected";
+
 export type ResearchClaim = {
   id: string;
   claim: string;
   category: ResearchClaimCategory;
-  sourceTitle: string;
-  sourceUrl: string;
-  sourcePublisher?: string;
-  sourceType: ResearchSourceType;
-  accessedAt: string;
+  /** A claim may be supported, qualified or contradicted by many sources. */
+  evidence: ClaimEvidence[];
+  quoteContext?: QuoteContext;
   confidence: "high" | "medium" | "low";
   verified: boolean;
+  verificationStatus: ResearchVerificationStatus;
+  verificationReason: string;
 };
 
-export type VerifiedResearchClaim = Omit<ResearchClaim, "verified"> & {
+export type VerifiedResearchClaim = Omit<
+  ResearchClaim,
+  "verified" | "verificationStatus"
+> & {
   verified: true;
+  verificationStatus: "verified";
 };
 
 export type EvidenceLeadResolution = {
@@ -187,6 +231,11 @@ type ResearchPackBase = {
   candidateId: string;
   writer: WriterSummary;
   proposedWhyHerToday: ProposedWhyHerToday;
+  provider: {
+    id: string;
+    mode: ResearchProviderMode;
+  };
+  sources: ResearchSource[];
   evidenceLeadResolutions: EvidenceLeadResolution[];
   claims: ResearchClaim[];
   verification: {

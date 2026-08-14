@@ -31,7 +31,7 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - `recentRepeatPenalty` 和 `weightedTotal` 均由程序确定性计算；具体权重与公式留到 Step 2。
 - 本步骤只修复类型与 Prompt 契约，不实现候选算法、provider、API、搜索或真实执行。
 
-### Step 2：每日候选与选题决策（已实现，待 review）
+### Step 2：每日候选与选题决策（已完成）
 
 - 支持只输入日期运行；主题、指定人物、风格与排除人物均为可选编辑干预。
 - 按当天强关联、当月强关联、编辑型柔性关联逐层发现候选。
@@ -41,12 +41,15 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - 初期允许 provider/mock，但必须明确标识。
 - 当前实现使用可复现 mock candidate/history provider；尚未接入互联网检索或真实 Research。
 
-### Step 3：Research Pack 与 Verification
+### Step 3：Research Pack 与 Verification（已实现，待 review）
 
-- 建立透明、可调试的 Research Pack。
+- 建立 Source → Evidence → Claim 分层、透明且可调试的 Research Pack。
 - 对姓名、日期、作品原名、首版年份、奖项、重要事件、人物关系与引语逐项核验。
-- 记录来源、发布机构、来源类型、访问时间、置信度与核验状态。
-- 引语没有可靠原文或权威出处时不进入成稿。
+- 使用可替换 `ResearchEvidenceProvider`；当前只有明确标识的 mock provider，不接真实互联网。
+- 用独立 Verification Policy 程序化处理来源质量、引语、冲突与放行状态。
+- 每条 Evidence Lead 恰好产生一个 resolution，并保留 needs-review/rejected 失败信息。
+- 只有日期关系、身份、作品和至少 4 条 claims 均达到门槛时才 `readyForDraft`。
+- 引语没有可靠原文或权威出处时拒绝，但 quote 不是 draft-ready 的必需项。
 
 ### Step 4：Reader Value、Writer 与 Growth Notes
 
