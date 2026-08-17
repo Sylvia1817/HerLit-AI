@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "incremental": false,
+    "strict": true
+  },
+  "include": [
+    "types/editorial.ts",
+    "lib/editorial-selection/**/*.ts",
+    "lib/research-verification/**/*.ts",
+    "lib/editorial-production/**/*.ts",
+    "tests/editorial-selection.test.ts",
+    "tests/research-verification.test.ts",
+    "tests/editorial-production.test.ts"
+  ],
+  "exclude": ["node_modules", "runtime", "dist", ".next"]
+}

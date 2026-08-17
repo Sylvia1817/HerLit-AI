@@ -51,18 +51,21 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - 只有日期关系、身份、作品和至少 4 条 claims 均达到门槛时才 `readyForDraft`。
 - 引语没有可靠原文或权威出处时拒绝，但 quote 不是 draft-ready 的必需项。
 
-### Step 3.1：Research runtime 边界收紧（已实现，待 review）
+### Step 3.1：Research runtime 边界收紧（已完成）
 
 - `VerifiedWhyHerToday` 只能由 Evidence Lead Resolutions 与 verified claims 确定性重建，runtime 不接受另行拼装结果。
 - `readyForDraft` 与程序 eligibility 双向一致，既拒绝错误放行，也拒绝满足条件后的错误阻塞。
 - Quote policy 不读取 provider 自报的 attribution 结论，而是比较 claim attribution 与权威 evidence 中的真实 author、character、narrator 等 speaker context。
 
-### Step 4：Reader Value、Writer 与 Growth Notes
+### Step 4：Reader Value、Grounded Writer 与 Growth Review（已实现，待 review）
 
-- 每篇选择 2–3 个真正值得收藏的 Reader Value Module。
-- 仅允许 Writer 使用已核验的 Research Claims。
-- 生成 3–5 个真实而有张力的标题、正文、标签与 3–6 张卡片方案。
-- 输出不直接发布的 Growth Notes，解释点击、读完、收藏、评论与关注理由。
+- 从 ready Research Pack 确定性构建只含 verified claims 的 `VerifiedEditorialContext`。
+- 独立 Reader Value Engine 生成并校验 2–3 个可收藏模块及其 claim provenance。
+- Writer 只读取 verified context、已批准 Value Modules、风格和品牌规则。
+- 标题、DraftBlocks 与 3–6 张卡片都保留 evidenceClaimIds；body 由 blocks 确定性渲染。
+- Quote speaker context 从 Research 一直保留到 Value/Writer，程序拒绝 character、narrator 与 author 的互换。
+- Writer 之后由独立 Editorial Review 输出 Growth Notes、issues 与人工审核建议。
+- 所有自动结果固定为 draft；当前三个 provider 都是明确标识的 mock，不接互联网、API、UI 或发布。
 
 ### Step 5：真实接口与编辑审核界面
 

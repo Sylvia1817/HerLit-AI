@@ -270,7 +270,7 @@ export type ResearchPack = ResearchPackBase &
       }
     | {
         readyForDraft: true;
-        /** Required before any DraftRequest can be assembled. */
+        /** Required before any VerifiedEditorialContext can be assembled. */
         verifiedWhyHerToday: VerifiedWhyHerToday;
       }
   );
@@ -291,11 +291,57 @@ export type ValueModule = {
   content: string;
   readerBenefit: string;
   evidenceClaimIds: string[];
+  quoteAttributions?: QuoteAttribution[];
 };
 
 export type ValueModuleCollection =
   | [ValueModule, ValueModule]
   | [ValueModule, ValueModule, ValueModule];
+
+export type VerifiedEditorialContext = {
+  date: string;
+  candidateId: string;
+  writer: WriterSummary;
+  whyHerToday: VerifiedWhyHerToday;
+  /** Only verified claims are exposed beyond the Research boundary. */
+  claims: VerifiedResearchClaim[];
+  /** Deterministic subset of claims whose category is quote. */
+  quoteClaims: VerifiedResearchClaim[];
+};
+
+export type QuoteAttribution = {
+  claimId: string;
+  speakerType: Exclude<QuoteSpeakerType, "unknown">;
+  speakerName?: string;
+  /** Deterministic display label required in grounded text. */
+  label: string;
+};
+
+export type DraftTitle = {
+  text: string;
+  evidenceClaimIds: string[];
+  angle: string;
+  quoteAttributions?: QuoteAttribution[];
+};
+
+export type DraftTitleCollection =
+  | [DraftTitle, DraftTitle, DraftTitle]
+  | [DraftTitle, DraftTitle, DraftTitle, DraftTitle]
+  | [DraftTitle, DraftTitle, DraftTitle, DraftTitle, DraftTitle];
+
+export type DraftBlock = {
+  id: string;
+  role:
+    | "hook"
+    | "why_today"
+    | "story"
+    | "meaning"
+    | "value"
+    | "interaction";
+  text: string;
+  evidenceClaimIds: string[];
+  quoteAttributions?: QuoteAttribution[];
+};
 
 export type CardPlan = {
   order: number;
@@ -311,6 +357,7 @@ export type CardPlan = {
   copy: string;
   visualDirection: string;
   evidenceClaimIds: string[];
+  quoteAttributions?: QuoteAttribution[];
 };
 
 export type CardPlanCollection =
@@ -318,11 +365,6 @@ export type CardPlanCollection =
   | [CardPlan, CardPlan, CardPlan, CardPlan]
   | [CardPlan, CardPlan, CardPlan, CardPlan, CardPlan]
   | [CardPlan, CardPlan, CardPlan, CardPlan, CardPlan, CardPlan];
-
-export type TitleCollection =
-  | [string, string, string]
-  | [string, string, string, string]
-  | [string, string, string, string, string];
 
 export type GrowthNotes = {
   clickReason: string;
@@ -332,35 +374,63 @@ export type GrowthNotes = {
   followReason: string;
 };
 
-export type DailyEditorialPackage = {
+export type GroundedDraft = {
+  provider: {
+    id: string;
+    mode: ResearchProviderMode;
+  };
   date: string;
-  candidateShortlist: CandidateShortlist;
-  selectedWriter: WriterSummary;
-  selectionDecision: SelectionDecision;
-  whyHerToday: VerifiedWhyHerToday;
-  editorialAngle: string;
-  readerHook: string;
-  researchClaims: ResearchClaim[];
-  titles: TitleCollection;
+  writer: WriterSummary;
+  titles: DraftTitleCollection;
+  blocks: DraftBlock[];
+  /** Deterministically rendered from blocks; never provider-authored. */
   body: string;
   hashtags: string[];
-  valueModules: ValueModuleCollection;
   cards: CardPlanCollection;
-  growthNotes: GrowthNotes;
-  verification: {
-    passed: string[];
-    needsReview: string[];
-  };
-  status: "draft" | "approved";
+  readerHook: string;
+  editorialAngle: string;
+  status: "draft";
 };
 
-export type DraftRequest = {
-  date: string;
-  candidateShortlist: CandidateShortlist;
-  selectedWriter: WriterSummary;
-  selectionDecision: SelectionDecision;
-  whyHerToday: VerifiedWhyHerToday;
-  verifiedClaims: VerifiedResearchClaim[];
+export type EditorialIssue = {
+  code: string;
+  severity: "warning" | "error";
+  message: string;
+  relatedIds?: string[];
+};
+
+export type EditorialReviewResult = {
+  provider: {
+    id: string;
+    mode: ResearchProviderMode;
+  };
+  growthNotes: GrowthNotes;
+  issues: EditorialIssue[];
+  recommendation: "ready_for_human_review" | "needs_revision";
+  status: "draft";
+};
+
+export type WriterBrandRules = {
+  requiredHashtags: readonly ["#HerLit", "#girltalk", "#她文日历"];
+  tone: "specific_restrained_literary";
+  autoApprovalAllowed: false;
+};
+
+export type WriterInput = {
+  context: VerifiedEditorialContext;
   valueModules: ValueModuleCollection;
   style?: string | null;
+  brandRules: WriterBrandRules;
+};
+
+export type DailyEditorialPackage = {
+  date: string;
+  selection: EditorialSelectionResult;
+  /** Full audit trail; never passed to Writer providers. */
+  researchAudit: ResearchPack;
+  verifiedContext: VerifiedEditorialContext;
+  valueModules: ValueModuleCollection;
+  draft: GroundedDraft;
+  review: EditorialReviewResult;
+  status: "draft";
 };

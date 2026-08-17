@@ -16,9 +16,9 @@ editorial_selection.md
 | --- | --- | --- |
 | `editorial_selection.md` | 发现并比较 3–5 位候选，输出唯一 `EditorialSelectionResult` 与待核验 `ProposedWhyHerToday` | 生成 Research Claim ID、写正文、补写未经核验的事实 |
 | `research_verification.md` | 将 Source/Evidence/Claim 分层，把每条 Evidence Lead 解析为正式 claims，并按程序 policy 生成 `ResearchPack` | 自行决定 verified、营销表达、正文润色 |
-| `value_modules.md` | 从已核验事实中选择 2–3 个值得收藏的读者价值模块 | 发明冷知识或关系 |
-| `xiaohongshu_writer.md` | 只用已核验事实和价值模块生成审核稿 | 搜索资料、判定事实真伪、自动批准 |
-| `editorial_review.md` | 从事实、编辑、增长和品牌角度复核 | 自动发布、替代人工终审 |
+| `value_modules.md` | 从 VerifiedEditorialContext 选择并引用 2–3 个值得收藏的模块 | 读取完整 Research Pack、发明冷知识或关系 |
+| `xiaohongshu_writer.md` | 用 verified context 和价值模块生成 grounded titles/blocks/cards | 搜索、创建 claim、输出 body source of truth、自动批准 |
+| `editorial_review.md` | 独立输出 Growth Notes、issues 与人工审核建议 | 改写 Research、Value Modules 或 Draft，替代人工终审 |
 
 共享数据契约见 `types/editorial.ts`。
 
@@ -30,7 +30,10 @@ editorial_selection.md
 - Research 创建正式 claims；只有核验后的 Why Her Today 才引用 `evidenceClaimIds`。
 - Research provider 只提供来源与证据候选；核验状态、冲突处理、quote 门槛和 `readyForDraft` 由程序规则决定。
 - `VerifiedWhyHerToday` 必须从 lead resolutions 与 verified claims 确定性重建；`readyForDraft` 必须与程序计算结果双向一致。
-- Writer 只能读取 `verified: true` 的 Research Claims。
+- 只有 `readyForDraft === true` 的 Research Pack 才能构建 `VerifiedEditorialContext`；Writer 只能读取这个隔离上下文与通过校验的 Value Modules。
+- 标题、事实 DraftBlock 与事实卡片都必须引用 context 中的 verified claim IDs；body 由 blocks 确定性渲染。
+- Quote 的 author/character/narrator speaker context 必须从 Evidence 一直保留到 Value 和 Writer 输出。
+- Growth Review 与 Writer 分离，且不能改写上游事实或草稿。
 - `recentRepeatPenalty` 和 `weightedTotal` 由程序按集中定义的 Step 2 公式确定性计算，模型不得自行填写。
 - 搜索摘要只能作为找来源的线索，不能独立支撑正文事实。
 - 柔性日期关系必须明确标记为 `editorial link`。
