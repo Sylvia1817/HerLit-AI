@@ -27,7 +27,7 @@
 5. Value：自然嵌入 2–3 个 Reader Value Modules。
 6. Interaction：提出与本文真正相关、容易产生经验或阅读交流的问题。
 
-首次出现的姓名使用中文名与原文名；作品保留原文名和首版年份，但只写已核验信息。引语必须保留程序给定的真实 speaker attribution：character 不得改写为作者名言，narrator 必须标识为叙述者文本；没有可靠引语就不用。
+首次出现的姓名使用中文名与原文名；作品保留原文名和首版年份，但只写已核验信息。引语必须同时保留程序给定的 canonical quote text 与真实 speaker attribution：不得改写引语措辞，character 不得改写为作者名言，narrator 必须标识为叙述者文本；没有可靠引语就不用。
 
 标签必须保留 `#HerLit #girltalk #她文日历`，其他标签应相关且克制。
 

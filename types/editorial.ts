@@ -175,6 +175,7 @@ export type ClaimEvidence = {
   sourceId: string;
   support: "direct" | "indirect" | "contradicts";
   locator?: string;
+  /** Quote verification requires an authoritative excerpt containing its canonical wording. */
   excerpt?: string;
   /** Raw speaker context found at this source location for quote claims. */
   quoteSpeakerContext?: QuoteSourceContext;
@@ -399,6 +400,14 @@ export type EditorialIssue = {
   relatedIds?: string[];
 };
 
+export type ReviewedInputBinding = {
+  /** Program-owned canonicalization revision; providers cannot set it. */
+  revision: "editorial-review-input/v1";
+  algorithm: "sha256";
+  /** Binds VerifiedEditorialContext + ValueModules + GroundedDraft. */
+  fingerprint: string;
+};
+
 export type EditorialReviewResult = {
   provider: {
     id: string;
@@ -407,6 +416,7 @@ export type EditorialReviewResult = {
   growthNotes: GrowthNotes;
   issues: EditorialIssue[];
   recommendation: "ready_for_human_review" | "needs_revision";
+  reviewedInputBinding: ReviewedInputBinding;
   status: "draft";
 };
 

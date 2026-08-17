@@ -73,6 +73,17 @@ export function buildQuoteAttribution(
   };
 }
 
+export function canonicalQuoteText(claim: VerifiedResearchClaim): string {
+  if (claim.category !== "quote") {
+    throw new Error(`Claim ${claim.id} is not a quote claim`);
+  }
+  const canonicalText = claim.claim.trim();
+  if (!canonicalText) {
+    throw new Error(`Quote claim ${claim.id} has no canonical wording`);
+  }
+  return canonicalText;
+}
+
 export function assertQuoteGrounding(
   label: string,
   text: string,
@@ -106,6 +117,12 @@ export function assertQuoteGrounding(
     }
     if (!text.includes(expected.label)) {
       throw new Error(`${label} must display quote attribution ${expected.label}`);
+    }
+    const canonicalText = canonicalQuoteText(claim);
+    if (!text.includes(canonicalText)) {
+      throw new Error(
+        `${label} changes the canonical quote text for quote ${claim.id}`,
+      );
     }
   }
 }

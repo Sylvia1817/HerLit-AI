@@ -124,12 +124,14 @@ async function research(
 function direct(
   sourceId: string,
   quoteSpeakerContext?: QuoteSourceContext,
+  excerpt?: string,
 ): ClaimEvidence {
   return {
     sourceId,
     support: "direct",
     locator: "p. 1",
     quoteSpeakerContext,
+    excerpt,
   };
 }
 
@@ -309,7 +311,7 @@ test("quote policy verifies a character quote only when labeled as character", a
             documentType: "work",
             workOrDocument: "小说原作",
             locator: "第 2 章",
-          }),
+          }, "Claim character-quote"),
         ],
         {
           attributedSpeakerType: "character",
@@ -324,6 +326,36 @@ test("quote policy verifies a character quote only when labeled as character", a
 
   assert.equal(pack.claims[0].verificationStatus, "verified");
   assert.match(pack.claims[0].verificationReason, /speaker as character/);
+});
+
+test("quote policy requires authoritative evidence for canonical wording", async () => {
+  const candidate = selectedCandidate("quote-wording");
+  const pack = await research(candidate, {
+    sources: [source("authoritative-edition", "publisher")],
+    claimProposals: [
+      claim(
+        "wording-quote",
+        "quote",
+        [
+          direct("authoritative-edition", {
+            speakerType: "character",
+            speakerName: "主人公",
+            documentType: "work",
+          }),
+        ],
+        {
+          attributedSpeakerType: "character",
+          attributedSpeakerName: "主人公",
+        },
+      ),
+    ],
+    leadFindings: [
+      { evidenceLeadId: "lead-date", researchClaimIds: ["wording-quote"] },
+    ],
+  });
+
+  assert.equal(pack.claims[0].verificationStatus, "needs_review");
+  assert.match(pack.claims[0].verificationReason, /canonical quote wording/);
 });
 
 test("R5: contradictory credible sources require review", async () => {

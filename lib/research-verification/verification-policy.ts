@@ -160,6 +160,17 @@ export function evaluateResearchClaim(
         "The attributed speaker name does not match the authoritative source context.",
       );
     }
+    const canonicalQuoteText = proposal.claim.trim();
+    if (
+      !canonicalQuoteText ||
+      !directStrongEvidence.some(({ evidence }) =>
+        evidence.excerpt?.includes(canonicalQuoteText),
+      )
+    ) {
+      return needsReview(
+        "Direct authoritative evidence must include the canonical quote wording.",
+      );
+    }
     return verified(
       "high",
       `Direct authoritative evidence identifies the quote speaker as ${actualSpeakerType}.`,

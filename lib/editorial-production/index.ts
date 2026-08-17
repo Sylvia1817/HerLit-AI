@@ -6,4 +6,5 @@ export * from "./grounding.ts";
 export * from "./mock-providers.ts";
 export * from "./package.ts";
 export * from "./review-engine.ts";
+export * from "./review-binding.ts";
 export * from "./value-engine.ts";

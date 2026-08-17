@@ -33,7 +33,9 @@ editorial_selection.md
 - 只有 `readyForDraft === true` 的 Research Pack 才能构建 `VerifiedEditorialContext`；Writer 只能读取这个隔离上下文与通过校验的 Value Modules。
 - 标题、事实 DraftBlock 与事实卡片都必须引用 context 中的 verified claim IDs；body 由 blocks 确定性渲染。
 - Quote 的 author/character/narrator speaker context 必须从 Evidence 一直保留到 Value 和 Writer 输出。
-- Growth Review 与 Writer 分离，且不能改写上游事实或草稿。
+- Quote 的 canonical wording 必须由权威 evidence excerpt 支撑，Value、Writer 与 Card 不得改写原文。
+- Growth Review 与 Writer 分离，且不能改写上游事实或草稿；程序生成的 fingerprint/revision 将 Review 绑定到精确输入。
+- Selection、Research、VerifiedContext 与 Draft 的 writer IDs 必须一致，transport 后重新校验。
 - `recentRepeatPenalty` 和 `weightedTotal` 由程序按集中定义的 Step 2 公式确定性计算，模型不得自行填写。
 - 搜索摘要只能作为找来源的线索，不能独立支撑正文事实。
 - 柔性日期关系必须明确标记为 `editorial link`。

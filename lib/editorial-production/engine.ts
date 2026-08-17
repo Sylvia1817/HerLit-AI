@@ -40,6 +40,9 @@ export class DailyEditorialProductionEngine {
     if (researchPack.candidateId !== selection.selectedCandidate.id) {
       throw new Error("ResearchPack must belong to the selected candidate");
     }
+    if (researchPack.writer.id !== selection.selectedCandidate.writer.id) {
+      throw new Error("ResearchPack must belong to the selected writer");
+    }
     const context = buildVerifiedEditorialContext(researchPack, selection.date);
     const valueModules = await this.valueEngine.create(context);
     const writerInput: WriterInput = {

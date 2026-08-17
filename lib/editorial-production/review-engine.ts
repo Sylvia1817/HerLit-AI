@@ -10,6 +10,11 @@ import type {
 import { assertVerifiedEditorialContext } from "./context.ts";
 import { assertGroundedDraft, HERLIT_BRAND_RULES } from "./draft-engine.ts";
 import { assertValueModules } from "./value-engine.ts";
+import {
+  buildReviewedInputBinding,
+  REVIEWED_INPUT_REVISION,
+  reviewedInputBindingsMatch,
+} from "./review-binding.ts";
 
 const EMPTY_GROWTH_PHRASES = [
   "内容很优质",
@@ -43,6 +48,9 @@ function assertReviewProposalBoundary(proposal: EditorialReviewProposal): void {
     "titles",
     "blocks",
     "cards",
+    "reviewedInputBinding",
+    "fingerprint",
+    "revision",
   ];
   for (const key of forbiddenKeys) {
     if (Object.prototype.hasOwnProperty.call(proposal, key)) {
@@ -53,12 +61,31 @@ function assertReviewProposalBoundary(proposal: EditorialReviewProposal): void {
 
 export function assertEditorialReviewResult(
   result: EditorialReviewResult,
+  input?: EditorialReviewInput,
 ): asserts result is EditorialReviewResult {
   if (result.status !== "draft") {
     throw new Error("Automated review status must remain draft");
   }
   if (!result.provider.id || !["mock", "live"].includes(result.provider.mode)) {
     throw new Error("Editorial review must preserve provider provenance");
+  }
+  const binding = result.reviewedInputBinding;
+  if (
+    !binding ||
+    binding.revision !== REVIEWED_INPUT_REVISION ||
+    binding.algorithm !== "sha256" ||
+    !/^[a-f0-9]{64}$/.test(binding.fingerprint)
+  ) {
+    throw new Error("Editorial review has an invalid reviewed-input binding");
+  }
+  if (
+    input &&
+    !reviewedInputBindingsMatch(
+      binding,
+      buildReviewedInputBinding(input),
+    )
+  ) {
+    throw new Error("Editorial review is bound to different reviewed inputs");
   }
   if (
     !["ready_for_human_review", "needs_revision"].includes(
@@ -114,9 +141,10 @@ export class EditorialReviewEngine {
       growthNotes: proposal.growthNotes,
       issues: proposal.issues,
       recommendation: proposal.recommendation,
+      reviewedInputBinding: buildReviewedInputBinding(input),
       status: "draft",
     };
-    assertEditorialReviewResult(result);
+    assertEditorialReviewResult(result, input);
     return result;
   }
 }

@@ -120,6 +120,7 @@ async function readyPack(): Promise<ResearchPack> {
           evidence: [{
             sourceId: "edition",
             support: "direct",
+            excerpt: "我要为自己选择生活",
             quoteSpeakerContext: {
               speakerType: "character",
               speakerName: "主人公",
@@ -217,6 +218,21 @@ async function fixtures() {
   const writer = new EditorialWriterEngine(new MockEditorialWriterProvider("mock-writer", proposal));
   const draft = await writer.create(input);
   return { pack, context, attribution, modules, proposal, input, draft };
+}
+
+async function completePackage(): Promise<DailyEditorialPackage> {
+  const pack = await readyPack();
+  const context = buildVerifiedEditorialContext(pack, DATE);
+  const attribution = buildQuoteAttribution(context.quoteClaims[0]);
+  const engine = new DailyEditorialProductionEngine(
+    new MockReaderValueProvider("mock-value", valueModules(attribution.label)),
+    new MockEditorialWriterProvider(
+      "mock-writer",
+      writerProposal(attribution.label),
+    ),
+    new MockEditorialReviewProvider("mock-review", reviewProposal()),
+  );
+  return engine.produce(selection(), pack);
 }
 
 test("W1: VerifiedEditorialContext excludes rejected claims completely", async () => {
@@ -344,4 +360,92 @@ test("W15: structuredClone preserves every package runtime invariant", async () 
   );
   const cloned = structuredClone(await engine.produce(selection(), pack)) as DailyEditorialPackage;
   assert.doesNotThrow(() => assertDailyEditorialPackage(cloned));
+});
+
+test("Step 4.1: Review A cannot be attached to a different valid Draft B", async () => {
+  const packageA = await completePackage();
+  const mixed = structuredClone(packageA);
+  mixed.draft.blocks.find(({ id }) => id === "hook")!.text =
+    "Draft B 使用了另一个仍然非事实性的开头。";
+  mixed.draft.body = mixed.draft.blocks
+    .map(({ text }) => text.trim())
+    .join("\n\n");
+
+  assert.throws(
+    () => assertDailyEditorialPackage(mixed),
+    /bound to different reviewed inputs/,
+  );
+});
+
+test("Step 4.1: Review Provider cannot choose its own input binding", async () => {
+  const { context, modules, draft } = await fixtures();
+  const providerOwned = {
+    ...reviewProposal(),
+    reviewedInputBinding: {
+      revision: "editorial-review-input/v1",
+      algorithm: "sha256",
+      fingerprint: "0".repeat(64),
+    },
+  } as unknown as EditorialReviewProposal;
+  const engine = new EditorialReviewEngine(
+    new MockEditorialReviewProvider("bad-review", providerOwned),
+  );
+
+  await assert.rejects(
+    () =>
+      engine.create({
+        context,
+        valueModules: modules as WriterInput["valueModules"],
+        draft,
+      }),
+    /cannot output or change reviewedInputBinding/,
+  );
+});
+
+test("Step 4.1: transported stages cannot be reassembled with another writer", async () => {
+  const transported = structuredClone(await completePackage());
+  transported.researchAudit.writer.id = "writer-other";
+  transported.verifiedContext.writer.id = "writer-other";
+  transported.draft.writer.id = "writer-other";
+
+  assert.throws(
+    () => assertDailyEditorialPackage(transported),
+    /writer identities must match/,
+  );
+});
+
+test("Step 4.1: quote claim ID and speaker cannot hide changed quote wording", async () => {
+  const { context, modules, draft, input, attribution } = await fixtures();
+
+  const badModules = structuredClone(modules);
+  badModules[2].content = `${attribution.label}：“我要替别人选择生活。”`;
+  assert.throws(
+    () => assertValueModules(badModules, context),
+    /canonical quote text/,
+  );
+
+  const badBlockDraft = structuredClone(draft);
+  badBlockDraft.blocks.find(({ id }) => id === "value")!.text =
+    `${attribution.label}：“我要替别人选择生活。”`;
+  badBlockDraft.body = badBlockDraft.blocks
+    .map(({ text }) => text.trim())
+    .join("\n\n");
+  assert.throws(
+    () => assertGroundedDraft(badBlockDraft, input),
+    /canonical quote text/,
+  );
+
+  const quoteCardDraft = structuredClone(draft);
+  const quoteCard = quoteCardDraft.cards[2];
+  quoteCard.title = "一句值得记住的话";
+  quoteCard.copy = `${attribution.label}：“我要为自己选择生活。”`;
+  quoteCard.evidenceClaimIds = ["quote-character"];
+  quoteCard.quoteAttributions = [attribution];
+  assert.doesNotThrow(() => assertGroundedDraft(quoteCardDraft, input));
+
+  quoteCard.copy = `${attribution.label}：“我要替别人选择生活。”`;
+  assert.throws(
+    () => assertGroundedDraft(quoteCardDraft, input),
+    /canonical quote text/,
+  );
 });

@@ -56,7 +56,7 @@ Selection 提供的是待核验 Evidence Leads，不是事实，也不是 Resear
 - 必须区分作者陈述、书信/日记、叙述者语言和小说人物台词。
 - 小说人物的话不得改写为作者本人名言。
 - 只有二手语录来源、归属冲突或无法找到原文时，拒绝该 claim；后续 Writer 不得使用。
-- Quote claim 的 `QuoteContext` 只声明它准备归给哪类 speaker；每条直接 Strong Source evidence 必须记录来源实际显示的 `quoteSpeakerContext`。程序比较 attributed speaker 与真实的 author、character、narrator 等 context；缺失、未知、互相冲突或不匹配时不得通过。provider 不得直接提供一个 `attributionStatus` 让 policy 照单全收。
+- Quote claim 的 `QuoteContext` 只声明它准备归给哪类 speaker；每条直接 Strong Source evidence 必须记录来源实际显示的 `quoteSpeakerContext`。至少一条权威 direct evidence 的 excerpt 必须包含 claim 的 canonical quote wording。程序比较 attributed speaker 与真实的 author、character、narrator 等 context；缺失、未知、互相冲突、措辞无法核验或 speaker 不匹配时不得通过。provider 不得直接提供一个 `attributionStatus` 让 policy 照单全收。
 
 ## 输出与放行
 

@@ -23,6 +23,18 @@ export function assertDailyEditorialPackage(
   assertSelectionResult(result.selection);
   assertResearchPack(result.researchAudit);
   assertVerifiedEditorialContext(result.verifiedContext);
+  const writerIds = [
+    result.selection.candidateShortlist[0].writer.id,
+    result.selection.selectedCandidate.writer.id,
+    result.researchAudit.writer.id,
+    result.verifiedContext.writer.id,
+    result.draft.writer.id,
+  ];
+  if (new Set(writerIds).size !== 1) {
+    throw new Error(
+      "Selection, Research, VerifiedContext and Draft writer identities must match",
+    );
+  }
   if (
     result.date !== result.selection.date ||
     result.researchAudit.candidateId !== result.selection.selectedCandidate.id ||
@@ -43,7 +55,11 @@ export function assertDailyEditorialPackage(
     valueModules: result.valueModules,
     brandRules: HERLIT_BRAND_RULES,
   });
-  assertEditorialReviewResult(result.review);
+  assertEditorialReviewResult(result.review, {
+    context: result.verifiedContext,
+    valueModules: result.valueModules,
+    draft: result.draft,
+  });
 }
 
 export function assembleDailyEditorialPackage(
