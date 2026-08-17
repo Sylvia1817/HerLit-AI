@@ -6,6 +6,7 @@ import type {
   ClaimEvidence,
   EvidenceLead,
   QuoteContext,
+  QuoteSourceContext,
   ResearchClaimCategory,
   ResearchPack,
   ResearchSourceType,
@@ -120,8 +121,16 @@ async function research(
   return pack;
 }
 
-function direct(sourceId: string): ClaimEvidence {
-  return { sourceId, support: "direct", locator: "p. 1" };
+function direct(
+  sourceId: string,
+  quoteSpeakerContext?: QuoteSourceContext,
+): ClaimEvidence {
+  return {
+    sourceId,
+    support: "direct",
+    locator: "p. 1",
+    quoteSpeakerContext,
+  };
 }
 
 function completeFixture(): {
@@ -195,10 +204,20 @@ test("R3: a secondary quote site cannot verify a quotation", async () => {
   const pack = await research(candidate, {
     sources: [source("quote-aggregator", "secondary", "Quote Aggregator")],
     claimProposals: [
-      claim("quote", "quote", [direct("quote-aggregator")], {
-        speakerType: "author",
-        attributionStatus: "confirmed",
-      }),
+      claim(
+        "quote",
+        "quote",
+        [
+          direct("quote-aggregator", {
+            speakerType: "author",
+            speakerName: "Writer r3",
+          }),
+        ],
+        {
+          attributedSpeakerType: "author",
+          attributedSpeakerName: "Writer r3",
+        },
+      ),
     ],
     leadFindings: [
       { evidenceLeadId: "lead-date", researchClaimIds: ["quote"] },
@@ -214,12 +233,23 @@ test("R4: character dialogue misattributed to the author is rejected", async () 
   const pack = await research(candidate, {
     sources: [source("authoritative-edition", "publisher")],
     claimProposals: [
-      claim("misattributed-quote", "quote", [direct("authoritative-edition")], {
-        speakerType: "character",
-        attributionStatus: "misattributed",
-        workOrDocument: "小说原作",
-        locator: "第 3 章",
-      }),
+      claim(
+        "misattributed-quote",
+        "quote",
+        [
+          direct("authoritative-edition", {
+            speakerType: "character",
+            speakerName: "小说人物",
+            documentType: "work",
+            workOrDocument: "小说原作",
+            locator: "第 3 章",
+          }),
+        ],
+        {
+          attributedSpeakerType: "author",
+          attributedSpeakerName: "Writer r4",
+        },
+      ),
     ],
     leadFindings: [
       {
@@ -230,7 +260,70 @@ test("R4: character dialogue misattributed to the author is rejected", async () 
   });
 
   assert.equal(pack.claims[0].verificationStatus, "rejected");
-  assert.match(pack.claims[0].verificationReason, /misattributed/);
+  assert.match(pack.claims[0].verificationReason, /source identifies character/);
+});
+
+test("quote policy rejects narrator text attributed to the author", async () => {
+  const candidate = selectedCandidate("quote-narrator");
+  const pack = await research(candidate, {
+    sources: [source("authoritative-edition", "publisher")],
+    claimProposals: [
+      claim(
+        "narrator-quote",
+        "quote",
+        [
+          direct("authoritative-edition", {
+            speakerType: "narrator",
+            documentType: "work",
+            workOrDocument: "小说原作",
+            locator: "第 1 章",
+          }),
+        ],
+        {
+          attributedSpeakerType: "author",
+          attributedSpeakerName: "Writer quote-narrator",
+        },
+      ),
+    ],
+    leadFindings: [
+      { evidenceLeadId: "lead-date", researchClaimIds: ["narrator-quote"] },
+    ],
+  });
+
+  assert.equal(pack.claims[0].verificationStatus, "rejected");
+  assert.match(pack.claims[0].verificationReason, /source identifies narrator/);
+});
+
+test("quote policy verifies a character quote only when labeled as character", async () => {
+  const candidate = selectedCandidate("quote-character");
+  const pack = await research(candidate, {
+    sources: [source("authoritative-edition", "publisher")],
+    claimProposals: [
+      claim(
+        "character-quote",
+        "quote",
+        [
+          direct("authoritative-edition", {
+            speakerType: "character",
+            speakerName: "主人公",
+            documentType: "work",
+            workOrDocument: "小说原作",
+            locator: "第 2 章",
+          }),
+        ],
+        {
+          attributedSpeakerType: "character",
+          attributedSpeakerName: "主人公",
+        },
+      ),
+    ],
+    leadFindings: [
+      { evidenceLeadId: "lead-date", researchClaimIds: ["character-quote"] },
+    ],
+  });
+
+  assert.equal(pack.claims[0].verificationStatus, "verified");
+  assert.match(pack.claims[0].verificationReason, /speaker as character/);
 });
 
 test("R5: contradictory credible sources require review", async () => {
@@ -354,6 +447,80 @@ test("R11: ResearchPack invariants survive structured cloning", async () => {
   const pack = await research(candidate, fixture);
 
   assert.doesNotThrow(() => assertResearchPack(structuredClone(pack)));
+});
+
+test("VerifiedWhyHerToday rebuild uses canonical Evidence Lead order", async () => {
+  const candidate = selectedCandidate("ordered-why", [
+    evidenceLead("lead-first"),
+    evidenceLead("lead-second"),
+  ]);
+  const pack = await research(candidate, {
+    sources: [source("archive", "institution")],
+    claimProposals: [
+      claim("claim-first", "date_event", [direct("archive")]),
+      claim("claim-second", "context", [direct("archive")]),
+    ],
+    leadFindings: [
+      {
+        evidenceLeadId: "lead-second",
+        researchClaimIds: ["claim-second"],
+      },
+      {
+        evidenceLeadId: "lead-first",
+        researchClaimIds: ["claim-first"],
+      },
+    ],
+  });
+
+  assert.deepEqual(pack.verifiedWhyHerToday?.evidenceClaimIds, [
+    "claim-first",
+    "claim-second",
+  ]);
+});
+
+test("VerifiedWhyHerToday must equal its deterministic reconstruction", async () => {
+  const { candidate, fixture } = completeFixture();
+  const pack = await research(candidate, fixture);
+  const forged = structuredClone(pack);
+  if (!forged.verifiedWhyHerToday) {
+    throw new Error("Complete fixture must produce VerifiedWhyHerToday");
+  }
+  forged.verifiedWhyHerToday.evidenceClaimIds = ["bio"];
+
+  assert.throws(
+    () => assertResearchPack(forged),
+    /must equal the deterministic reconstruction/,
+  );
+});
+
+test("readyForDraft rejects both false positives and false negatives", async () => {
+  const { candidate, fixture } = completeFixture();
+  const eligiblePack = await research(candidate, fixture);
+  const falseNegative = structuredClone(eligiblePack);
+  (falseNegative as { readyForDraft: boolean }).readyForDraft = false;
+  assert.throws(
+    () => assertResearchPack(falseNegative),
+    /deterministic eligibility result true/,
+  );
+
+  const incompleteCandidate = selectedCandidate("not-ready");
+  const incompletePack = await research(incompleteCandidate, {
+    sources: [source("archive", "institution")],
+    claimProposals: [
+      claim("date", "date_event", [direct("archive")]),
+      claim("bio", "bio", [direct("archive")]),
+      claim("context", "context", [direct("archive")]),
+    ],
+    leadFindings: [
+      { evidenceLeadId: "lead-date", researchClaimIds: ["date"] },
+    ],
+  });
+  const falsePositive = structuredClone(incompletePack);
+  (falsePositive as { readyForDraft: boolean }).readyForDraft = true;
+  assert.throws(
+    () => assertResearchPack(falsePositive),
+    /deterministic eligibility result false/,
+  );
 });
 
 test("R12: invalid source and claim references are rejected at runtime", async () => {

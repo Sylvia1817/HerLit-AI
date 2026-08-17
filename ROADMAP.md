@@ -41,7 +41,7 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - 初期允许 provider/mock，但必须明确标识。
 - 当前实现使用可复现 mock candidate/history provider；尚未接入互联网检索或真实 Research。
 
-### Step 3：Research Pack 与 Verification（已实现，待 review）
+### Step 3：Research Pack 与 Verification（已完成）
 
 - 建立 Source → Evidence → Claim 分层、透明且可调试的 Research Pack。
 - 对姓名、日期、作品原名、首版年份、奖项、重要事件、人物关系与引语逐项核验。
@@ -50,6 +50,12 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - 每条 Evidence Lead 恰好产生一个 resolution，并保留 needs-review/rejected 失败信息。
 - 只有日期关系、身份、作品和至少 4 条 claims 均达到门槛时才 `readyForDraft`。
 - 引语没有可靠原文或权威出处时拒绝，但 quote 不是 draft-ready 的必需项。
+
+### Step 3.1：Research runtime 边界收紧（已实现，待 review）
+
+- `VerifiedWhyHerToday` 只能由 Evidence Lead Resolutions 与 verified claims 确定性重建，runtime 不接受另行拼装结果。
+- `readyForDraft` 与程序 eligibility 双向一致，既拒绝错误放行，也拒绝满足条件后的错误阻塞。
+- Quote policy 不读取 provider 自报的 attribution 结论，而是比较 claim attribution 与权威 evidence 中的真实 author、character、narrator 等 speaker context。
 
 ### Step 4：Reader Value、Writer 与 Growth Notes
 

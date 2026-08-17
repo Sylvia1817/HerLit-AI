@@ -35,7 +35,7 @@ Selection 提供的是待核验 Evidence Leads，不是事实，也不是 Resear
 - 不得把 `EvidenceLead.id` 复制或伪装成 `ResearchClaim.id`。
 - 一条 lead 可以解析为零条、一条或多条 claims；无法证实时标记为 `needs_review` 或 `rejected`。
 - 每条 Evidence Lead 必须恰好有一个 resolution；不得遗漏、重复或引用不存在的 claim。
-- 只有支撑日期关系的 claims 已通过核验后，才生成 `verifiedWhyHerToday`，其中 `evidenceClaimIds` 只引用 `verified: true` 的正式 claims。
+- 只有支撑日期关系的 claims 已通过核验后，才生成 `verifiedWhyHerToday`。该对象必须由原始 `ProposedWhyHerToday`、全部 Evidence Lead Resolutions 及其 verified claims 确定性重建；`evidenceClaimIds` 必须与重建结果完全一致，不能另行拼装。
 
 ## 来源优先级
 
@@ -56,7 +56,7 @@ Selection 提供的是待核验 Evidence Leads，不是事实，也不是 Resear
 - 必须区分作者陈述、书信/日记、叙述者语言和小说人物台词。
 - 小说人物的话不得改写为作者本人名言。
 - 只有二手语录来源、归属冲突或无法找到原文时，拒绝该 claim；后续 Writer 不得使用。
-- Quote claim 必须携带 `QuoteContext`，明确说话者类型、归属状态以及作品/档案与 locator（如适用）。只有归属已确认且存在直接 Strong Source 时才能通过。
+- Quote claim 的 `QuoteContext` 只声明它准备归给哪类 speaker；每条直接 Strong Source evidence 必须记录来源实际显示的 `quoteSpeakerContext`。程序比较 attributed speaker 与真实的 author、character、narrator 等 context；缺失、未知、互相冲突或不匹配时不得通过。provider 不得直接提供一个 `attributionStatus` 让 policy 照单全收。
 
 ## 输出与放行
 
@@ -74,5 +74,7 @@ Selection 提供的是待核验 Evidence Leads，不是事实，也不是 Resear
 - verified claims 总数至少为 4。
 
 Quote 不是放行必需项；找不到可靠 quote 时应省略，而不是降低标准。Pack 必须保留 `needsReviewClaimIds`、`rejectedClaimIds` 与零 claim 的 lead resolution，让编辑看到研究失败信息。
+
+`readyForDraft` 是程序双向确定值：满足全部门槛时必须为 true，任一门槛不满足时必须为 false；runtime invariant 同时拒绝 false positive 和 false negative。
 
 本阶段 provider 明确为 mock，不得假装已进行实时联网研究。不要为了完整度补写未经证实的内容，不要写标题、正文、Value Modules、增长建议或图片方案。

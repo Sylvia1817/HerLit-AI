@@ -176,21 +176,37 @@ export type ClaimEvidence = {
   support: "direct" | "indirect" | "contradicts";
   locator?: string;
   excerpt?: string;
+  /** Raw speaker context found at this source location for quote claims. */
+  quoteSpeakerContext?: QuoteSourceContext;
+};
+
+export type QuoteSpeakerType =
+  | "author"
+  | "narrator"
+  | "character"
+  | "other"
+  | "unknown";
+
+export type QuoteDocumentType =
+  | "work"
+  | "letter"
+  | "diary"
+  | "speech"
+  | "interview";
+
+export type QuoteSourceContext = {
+  /** Speaker identified by the cited source at the evidence locator. */
+  speakerType: QuoteSpeakerType;
+  speakerName?: string;
+  documentType?: QuoteDocumentType;
+  workOrDocument?: string;
+  locator?: string;
 };
 
 export type QuoteContext = {
-  speakerType:
-    | "author"
-    | "narrator"
-    | "character"
-    | "letter"
-    | "diary"
-    | "speech"
-    | "interview";
-  /** Program-readable attribution finding; models cannot override policy. */
-  attributionStatus: "confirmed" | "misattributed" | "uncertain";
-  workOrDocument?: string;
-  locator?: string;
+  /** Attribution asserted by the claim; policy compares it with source context. */
+  attributedSpeakerType: Exclude<QuoteSpeakerType, "unknown">;
+  attributedSpeakerName?: string;
 };
 
 export type ResearchVerificationStatus =

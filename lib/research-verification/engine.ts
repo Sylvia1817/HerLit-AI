@@ -1,6 +1,7 @@
 import type {
   Candidate,
   EvidenceLeadResolution,
+  ProposedWhyHerToday,
   ResearchClaim,
   ResearchPack,
   ResearchVerificationStatus,
@@ -41,7 +42,7 @@ function resolutionStatus(
   return "needs_review";
 }
 
-function isReadyForDraft(
+export function calculateReadyForDraft(
   claims: readonly ResearchClaim[],
   verifiedWhyHerToday: VerifiedWhyHerToday | undefined,
 ): boolean {
@@ -108,22 +109,43 @@ function assertInvestigation(
   }
 }
 
-function toVerifiedWhyHerToday(
-  candidate: Candidate,
+export function rebuildVerifiedWhyHerToday(
+  proposed: ProposedWhyHerToday,
   resolutions: readonly EvidenceLeadResolution[],
+  claims: readonly ResearchClaim[],
 ): VerifiedWhyHerToday | undefined {
+  const resolutionsByLeadId = new Map(
+    resolutions.map((resolution) => [resolution.evidenceLeadId, resolution]),
+  );
+  const orderedResolutions = proposed.evidenceLeads.map(({ id }) =>
+    resolutionsByLeadId.get(id),
+  );
   if (
-    resolutions.length === 0 ||
-    !resolutions.every(({ status }) => status === "verified")
+    orderedResolutions.length === 0 ||
+    orderedResolutions.some(
+      (resolution) => !resolution || resolution.status !== "verified",
+    )
   ) {
     return undefined;
   }
+  const claimsById = new Map(claims.map((claim) => [claim.id, claim]));
   const evidenceClaimIds = [
-    ...new Set(resolutions.flatMap(({ researchClaimIds }) => researchClaimIds)),
+    ...new Set(
+      orderedResolutions.flatMap(
+        (resolution) => resolution?.researchClaimIds ?? [],
+      ),
+    ),
   ];
-  if (evidenceClaimIds.length === 0) return undefined;
+  if (
+    evidenceClaimIds.length === 0 ||
+    evidenceClaimIds.some((claimId) => {
+      const claim = claimsById.get(claimId);
+      return !claim?.verified || claim.verificationStatus !== "verified";
+    })
+  ) {
+    return undefined;
+  }
 
-  const proposed = candidate.proposedWhyHerToday;
   return {
     relationType: proposed.relationType,
     relationDate: proposed.relationDate,
@@ -133,6 +155,24 @@ function toVerifiedWhyHerToday(
     editorExplanation: proposed.editorExplanation,
     evidenceClaimIds,
   };
+}
+
+function whyHerTodayMatches(
+  actual: VerifiedWhyHerToday,
+  expected: VerifiedWhyHerToday,
+): boolean {
+  return (
+    actual.relationType === expected.relationType &&
+    actual.relationDate === expected.relationDate &&
+    actual.tier === expected.tier &&
+    actual.isEditorialLink === expected.isEditorialLink &&
+    actual.shortReason === expected.shortReason &&
+    actual.editorExplanation === expected.editorExplanation &&
+    actual.evidenceClaimIds.length === expected.evidenceClaimIds.length &&
+    actual.evidenceClaimIds.every(
+      (claimId, index) => claimId === expected.evidenceClaimIds[index],
+    )
+  );
 }
 
 function claimProposalFromClaim(claim: ResearchClaim): ResearchClaimProposal {
@@ -265,40 +305,29 @@ export function assertResearchPack(
     }
   }
 
-  if (pack.verifiedWhyHerToday) {
-    const evidenceClaimIds = pack.verifiedWhyHerToday.evidenceClaimIds;
-    assertUniqueIds("VerifiedWhyHerToday evidenceClaimIds", evidenceClaimIds);
-    if (evidenceClaimIds.length === 0) {
-      throw new Error("VerifiedWhyHerToday must reference at least one claim");
-    }
-    for (const claimId of evidenceClaimIds) {
-      const claim = claimsById.get(claimId);
-      if (!claim || !claim.verified) {
-        throw new Error(
-          `VerifiedWhyHerToday references unverified claim ${claimId}`,
-        );
-      }
-    }
-    const proposed = pack.proposedWhyHerToday;
-    const verifiedWhy = pack.verifiedWhyHerToday;
-    if (
-      verifiedWhy.relationType !== proposed.relationType ||
-      verifiedWhy.relationDate !== proposed.relationDate ||
-      verifiedWhy.tier !== proposed.tier ||
-      verifiedWhy.isEditorialLink !== proposed.isEditorialLink ||
-      verifiedWhy.shortReason !== proposed.shortReason ||
-      verifiedWhy.editorExplanation !== proposed.editorExplanation
-    ) {
-      throw new Error("VerifiedWhyHerToday does not match the proposed relation");
-    }
-  }
-
+  const expectedWhyHerToday = rebuildVerifiedWhyHerToday(
+    pack.proposedWhyHerToday,
+    pack.evidenceLeadResolutions,
+    pack.claims,
+  );
   if (
-    pack.readyForDraft &&
-    !isReadyForDraft(pack.claims, pack.verifiedWhyHerToday)
+    Boolean(pack.verifiedWhyHerToday) !== Boolean(expectedWhyHerToday) ||
+    (pack.verifiedWhyHerToday &&
+      expectedWhyHerToday &&
+      !whyHerTodayMatches(pack.verifiedWhyHerToday, expectedWhyHerToday))
   ) {
     throw new Error(
-      "readyForDraft requires verified date, bio, work and at least four verified claims",
+      "VerifiedWhyHerToday must equal the deterministic reconstruction from Evidence Lead resolutions and verified claims",
+    );
+  }
+
+  const expectedReadyForDraft = calculateReadyForDraft(
+    pack.claims,
+    expectedWhyHerToday,
+  );
+  if (pack.readyForDraft !== expectedReadyForDraft) {
+    throw new Error(
+      `readyForDraft must equal deterministic eligibility result ${expectedReadyForDraft}`,
     );
   }
 }
@@ -331,11 +360,12 @@ export class ResearchVerificationEngine {
         researchClaimIds: [...finding.researchClaimIds],
         note: finding.note,
       }));
-    const verifiedWhyHerToday = toVerifiedWhyHerToday(
-      candidate,
+    const verifiedWhyHerToday = rebuildVerifiedWhyHerToday(
+      candidate.proposedWhyHerToday,
       evidenceLeadResolutions,
+      claims,
     );
-    const readyForDraft = isReadyForDraft(claims, verifiedWhyHerToday);
+    const readyForDraft = calculateReadyForDraft(claims, verifiedWhyHerToday);
 
     const base = {
       candidateId: candidate.id,

@@ -29,6 +29,7 @@ editorial_selection.md
 - Selection 只输出 Evidence Leads；Evidence Lead ID 不是 Research Claim ID。
 - Research 创建正式 claims；只有核验后的 Why Her Today 才引用 `evidenceClaimIds`。
 - Research provider 只提供来源与证据候选；核验状态、冲突处理、quote 门槛和 `readyForDraft` 由程序规则决定。
+- `VerifiedWhyHerToday` 必须从 lead resolutions 与 verified claims 确定性重建；`readyForDraft` 必须与程序计算结果双向一致。
 - Writer 只能读取 `verified: true` 的 Research Claims。
 - `recentRepeatPenalty` 和 `weightedTotal` 由程序按集中定义的 Step 2 公式确定性计算，模型不得自行填写。
 - 搜索摘要只能作为找来源的线索，不能独立支撑正文事实。

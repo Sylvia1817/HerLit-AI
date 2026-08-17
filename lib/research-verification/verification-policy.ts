@@ -97,24 +97,72 @@ export function evaluateResearchClaim(
 
   if (proposal.category === "quote") {
     if (!proposal.quoteContext) {
-      return rejected("Quote context and speaker attribution are missing.");
-    }
-    if (proposal.quoteContext.attributionStatus === "misattributed") {
-      return rejected(
-        "The quotation is misattributed and cannot be presented as the author's words.",
-      );
-    }
-    if (proposal.quoteContext.attributionStatus !== "confirmed") {
-      return rejected("The quotation attribution is not confirmed.");
+      return rejected("The quote claim does not declare its attributed speaker.");
     }
     if (!hasDirectStrong) {
       return rejected(
         "A quote requires direct evidence from an authoritative edition or traceable archive.",
       );
     }
+
+    const directStrongEvidence = supportive.filter(
+      ({ evidence, source }) =>
+        evidence.support === "direct" &&
+        STRONG_SOURCE_TYPES.has(source.sourceType),
+    );
+    if (
+      directStrongEvidence.some(
+        ({ evidence }) => !evidence.quoteSpeakerContext,
+      )
+    ) {
+      return needsReview(
+        "Every direct authoritative quote citation must identify the actual speaker context.",
+      );
+    }
+
+    const sourceContexts = directStrongEvidence.map(
+      ({ evidence }) => evidence.quoteSpeakerContext!,
+    );
+    if (sourceContexts.some(({ speakerType }) => speakerType === "unknown")) {
+      return needsReview(
+        "The authoritative source does not identify the quotation's actual speaker.",
+      );
+    }
+    const sourceSpeakerTypes = new Set(
+      sourceContexts.map(({ speakerType }) => speakerType),
+    );
+    if (sourceSpeakerTypes.size !== 1) {
+      return needsReview(
+        "Authoritative sources disagree about the quotation's actual speaker type.",
+      );
+    }
+
+    const actualSpeakerType = sourceContexts[0].speakerType;
+    if (
+      actualSpeakerType !== proposal.quoteContext.attributedSpeakerType
+    ) {
+      return rejected(
+        `The claim attributes the quote to ${proposal.quoteContext.attributedSpeakerType}, but the source identifies ${actualSpeakerType}.`,
+      );
+    }
+
+    const attributedName = proposal.quoteContext.attributedSpeakerName
+      ?.trim()
+      .toLocaleLowerCase();
+    if (
+      attributedName &&
+      sourceContexts.some(
+        ({ speakerName }) =>
+          speakerName?.trim().toLocaleLowerCase() !== attributedName,
+      )
+    ) {
+      return rejected(
+        "The attributed speaker name does not match the authoritative source context.",
+      );
+    }
     return verified(
       "high",
-      "Direct authoritative evidence confirms the quotation and its speaker context.",
+      `Direct authoritative evidence identifies the quote speaker as ${actualSpeakerType}.`,
     );
   }
 
