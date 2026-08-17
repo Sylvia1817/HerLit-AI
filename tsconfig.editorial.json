@@ -10,9 +10,13 @@
     "lib/editorial-selection/**/*.ts",
     "lib/research-verification/**/*.ts",
     "lib/editorial-production/**/*.ts",
+    "lib/editorial-workbench/**/*.ts",
+    "app/api/editorial/**/*.ts",
+    "app/page.tsx",
     "tests/editorial-selection.test.ts",
     "tests/research-verification.test.ts",
-    "tests/editorial-production.test.ts"
+    "tests/editorial-production.test.ts",
+    "tests/editorial-workbench.test.ts"
   ],
   "exclude": ["node_modules", "runtime", "dist", ".next"]
 }

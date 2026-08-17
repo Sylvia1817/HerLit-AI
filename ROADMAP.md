@@ -67,18 +67,22 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - Writer 之后由独立 Editorial Review 输出 Growth Notes、issues 与人工审核建议。
 - 所有自动结果固定为 draft；当前三个 provider 都是明确标识的 mock，不接互联网、API、UI 或发布。
 
-### Step 4.1：Production runtime 边界收紧（已实现，待 review）
+### Step 4.1：Production runtime 边界收紧（已完成）
 
 - 程序使用 canonical SHA-256 fingerprint/revision 将 Review 绑定到当前 VerifiedContext、Value Modules 与 GroundedDraft。
 - Selection shortlist/selected candidate、Research、VerifiedContext 与 Draft 的 writer identity 必须一致。
 - Quote 除真实 speaker attribution 外，还必须由权威 evidence excerpt 核验 canonical wording；下游不能改写引语正文。
 
-### Step 5：真实接口与编辑审核界面
+### Step 5：Live Editorial Workbench（已实现，待 review）
 
-- 以分步 FastAPI 接口接入候选、Research 与 Draft；开发阶段保留逐段检查能力。
-- 第一屏先展示候选、Today's Pick 与 Why Her Today，正文置后。
-- 清楚展示来源、置信度、核验状态、Reader Value 与 Growth Notes。
-- 替换当前硬编码的伍尔夫模拟结果，并完善人工审核状态。
+- 以 Next/TypeScript server routes 直接编排既有 domain engines；FastAPI 只保留 health scaffold。
+- candidates、research、produce、review API 使用结构化 stage errors 和短期 server session，拒绝客户端伪造程序字段。
+- mock/live provider 通过 env 切换；Live Research 保持 Search、Source Fetch、Claim Extraction、Verification 分层。
+- Source Fetch 实施协议、localhost/私网、redirect、timeout、size 与 content-type 基础 SSRF 边界。
+- 文学编辑工作台分步展示 shortlist、Why Her Today、Research audit、Reader Value、grounded draft、cards 与 Growth Review。
+- 人工编辑会使旧 review binding 失效；re-review 后才可人工批准。
+- Human approval 是 DailyEditorialPackage 外层状态；自动领域状态仍为 draft，批准后仅允许 Markdown/JSON 导出，不自动发布。
+- 当前 persistence 为进程内 editor session；未引入用户、权限、CMS 或 content history database。
 
 ## 暂不开发
 

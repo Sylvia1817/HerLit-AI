@@ -1,257 +1,133 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { DailyEditorialPackage, EditorialSelectionResult, ResearchPack } from "../types/editorial.ts";
+import type { ApiFailure, CandidateApiMeta, HumanReviewState, ProductionApiMeta, ResearchApiMeta } from "../lib/editorial-workbench/types.ts";
+import { approveEditorialPackage, exportEditorialJson, exportEditorialMarkdown } from "../lib/editorial-workbench/human-review.ts";
 
-type ResultTab = "brief" | "writer" | "cards";
+type BusyStage = "selection" | "research" | "production" | "review" | null;
+const STYLES = ["克制 · 文学", "温柔 · 叙事", "锐利 · 评论", "轻盈 · 社交"];
 
-const tabs: { id: ResultTab; label: string; count: string }[] = [
-  { id: "brief", label: "小红书正文", count: "01" },
-  { id: "writer", label: "作家资料卡", count: "02" },
-  { id: "cards", label: "配图卡片", count: "03" },
-];
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const payload = await response.json() as T | ApiFailure;
+  if (!response.ok || !(payload as { ok?: boolean }).ok) {
+    const error = (payload as ApiFailure).error;
+    throw new Error(`${error.stage} · ${error.code} · ${error.message}`);
+  }
+  return payload as T;
+}
 
-const styles = ["克制 · 文学", "温柔 · 叙事", "锐利 · 评论", "轻盈 · 社交"];
-
-function formatChineseDate(value: string) {
-  const date = new Date(`${value}T00:00:00`);
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-  }).format(date);
+function download(name: string, content: string, type: string) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url);
 }
 
 export default function Home() {
-  const [date, setDate] = useState("2026-07-30");
-  const [topic, setTopic] = useState("女性如何夺回自己的叙事");
-  const [style, setStyle] = useState(styles[0]);
-  const [activeTab, setActiveTab] = useState<ResultTab>("brief");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedAt, setGeneratedAt] = useState("今天 08:30");
-  const [copied, setCopied] = useState(false);
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [topic, setTopic] = useState("");
+  const [candidateWriter, setCandidateWriter] = useState("");
+  const [style, setStyle] = useState(STYLES[0]);
+  const [excludeWriterIds, setExcludeWriterIds] = useState("");
+  const [interventionOpen, setInterventionOpen] = useState(false);
+  const [selection, setSelection] = useState<EditorialSelectionResult>();
+  const [selectionMeta, setSelectionMeta] = useState<CandidateApiMeta>();
+  const [confirmed, setConfirmed] = useState(false);
+  const [research, setResearch] = useState<ResearchPack>();
+  const [researchMeta, setResearchMeta] = useState<ResearchApiMeta>();
+  const [editorialPackage, setEditorialPackage] = useState<DailyEditorialPackage>();
+  const [productionMeta, setProductionMeta] = useState<ProductionApiMeta>();
+  const [preferredTitle, setPreferredTitle] = useState(0);
+  const [reviewStale, setReviewStale] = useState(false);
+  const [humanReview, setHumanReview] = useState<HumanReviewState>({ status: "editing" });
+  const [busy, setBusy] = useState<BusyStage>(null);
+  const [error, setError] = useState("");
+  const providerMode = selectionMeta?.providerMode ?? "mock";
 
-  const displayDate = useMemo(() => formatChineseDate(date), [date]);
+  const sourceById = useMemo(() => new Map(research?.sources.map((source) => [source.id, source]) ?? []), [research]);
+  const blockers = useMemo(() => {
+    if (!research || research.readyForDraft) return [];
+    const verified = research.claims.filter(({ verified }) => verified);
+    return [...(!research.verifiedWhyHerToday ? ["Why Her Today 尚未核验"] : []), ...(!verified.some(({ category }) => category === "bio") ? ["缺少 verified bio claim"] : []), ...(!verified.some(({ category }) => category === "work") ? ["缺少 verified work claim"] : []), ...(verified.length < 4 ? [`仅有 ${verified.length} 条 verified claims，需要至少 4 条`] : [])];
+  }, [research]);
 
-  const handleGenerate = () => {
-    setIsGenerating(true);
-    window.setTimeout(() => {
-      setIsGenerating(false);
-      setGeneratedAt(
-        new Intl.DateTimeFormat("zh-CN", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        }).format(new Date()),
-      );
-    }, 900);
-  };
+  async function run(stage: BusyStage, action: () => Promise<void>) {
+    setBusy(stage); setError("");
+    try { await action(); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setBusy(null); }
+  }
 
-  const copyCurrent = async () => {
-    const text = document.querySelector("[data-result-content]")?.textContent ?? "";
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
-  };
+  async function discoverCandidates() {
+    await run("selection", async () => {
+      const result = await postJson<{ ok: true; data: EditorialSelectionResult; meta: CandidateApiMeta }>("/api/editorial/candidates", { date, topic: topic || undefined, candidateWriter: candidateWriter || undefined, style, excludeWriterIds: excludeWriterIds.split(",").map((item) => item.trim()).filter(Boolean) });
+      setSelection(result.data); setSelectionMeta(result.meta); setConfirmed(false); setResearch(undefined); setResearchMeta(undefined); setEditorialPackage(undefined); setProductionMeta(undefined); setHumanReview({ status: "editing" }); setReviewStale(false);
+    });
+  }
 
-  return (
-    <main>
-      <header className="site-header">
-        <a className="brand" href="#top" aria-label="HerLit AI 首页">
-          <span className="brand-mark">H</span>
-          <span>
-            <strong>HerLit AI</strong>
-            <small>女性文学 AI 内容工作台</small>
-          </span>
-        </a>
-        <div className="header-meta">
-          <span className="status-dot" />
-          <span>编辑部在线</span>
-          <span className="rule" />
-          <span>第 1 阶段 · 本地模拟</span>
-        </div>
-      </header>
+  async function startResearch() {
+    if (!selection || !selectionMeta) return;
+    await run("research", async () => {
+      const result = await postJson<{ ok: true; data: ResearchPack; meta: ResearchApiMeta }>("/api/editorial/research", { selectionId: selectionMeta.selectionId, selection, candidateId: selection.selectedCandidate.id });
+      setResearch(result.data); setResearchMeta(result.meta); setEditorialPackage(undefined);
+    });
+  }
 
-      <section className="hero" id="top">
-        <div className="eyebrow"><span>XIAOHONGSHU LITERARY STUDIO</span></div>
-        <h1>每天一篇文字，<br />让女性文学被看见。</h1>
-        <p className="hero-copy">
-          HerLit 为你准备小红书正文、标题标签与 3:4 图文卡片。<br />
-          AI 完成初稿，你审核后发布。
-        </p>
-      </section>
+  async function produceDraft() {
+    if (!selection || !selectionMeta || !research || !researchMeta) return;
+    await run("production", async () => {
+      const result = await postJson<{ ok: true; data: DailyEditorialPackage; meta: ProductionApiMeta }>("/api/editorial/produce", { selectionId: selectionMeta.selectionId, researchId: researchMeta.researchId, selection, researchPack: research, style });
+      setEditorialPackage(result.data); setProductionMeta(result.meta); setPreferredTitle(0); setReviewStale(false); setHumanReview({ status: "ready_for_review" });
+    });
+  }
 
-      <section className="workspace" aria-label="内容生成工作台">
-        <div className="input-panel">
-          <div className="panel-heading">
-            <span className="step-number">01</span>
-            <div>
-              <h2>今天想写什么？</h2>
-              <p>给编辑部一个清晰的起点</p>
-            </div>
-          </div>
+  function editPackage(mutator: (draft: DailyEditorialPackage) => void) {
+    if (!editorialPackage) return;
+    const next = structuredClone(editorialPackage); mutator(next); setEditorialPackage(next); setReviewStale(true); setHumanReview({ status: "editing" });
+  }
 
-          <label>
-            <span className="field-label">发布日期</span>
-            <span className="date-field">
-              <input
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-              />
-              <span>{displayDate}</span>
-            </span>
-          </label>
+  async function rerunReview() {
+    if (!editorialPackage || !productionMeta) return;
+    await run("review", async () => {
+      const result = await postJson<{ ok: true; data: DailyEditorialPackage; meta: ProductionApiMeta }>("/api/editorial/review", { packageId: productionMeta.packageId, valueModules: editorialPackage.valueModules, draft: editorialPackage.draft });
+      setEditorialPackage(result.data); setReviewStale(false); setHumanReview({ status: "ready_for_review" });
+    });
+  }
 
-          <label>
-            <span className="field-label">内容主题</span>
-            <textarea
-              value={topic}
-              onChange={(event) => setTopic(event.target.value)}
-              rows={3}
-              placeholder="例如：女性友谊如何成为一种抵抗"
-            />
-            <span className="field-hint">可以是一位作家、一部作品，或一个你正在思考的问题。</span>
-          </label>
+  function approve() {
+    if (!editorialPackage) return;
+    try { setHumanReview(approveEditorialPackage(editorialPackage, reviewStale)); setError(""); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+  }
 
-          <fieldset>
-            <legend className="field-label">表达风格</legend>
-            <div className="style-options">
-              {styles.map((item) => (
-                <button
-                  className={style === item ? "style-chip active" : "style-chip"}
-                  type="button"
-                  key={item}
-                  onClick={() => setStyle(item)}
-                >
-                  {item}
-                </button>
-              ))}
-            </div>
-          </fieldset>
+  function exportFile(format: "md" | "json", publishReady: boolean) {
+    if (!editorialPackage) return;
+    try {
+      const options = { preferredTitleIndex: preferredTitle, publishReady };
+      const content = format === "md" ? exportEditorialMarkdown(editorialPackage, humanReview, options) : exportEditorialJson(editorialPackage, humanReview, options);
+      download(`herlit-${date}-${publishReady ? "approved" : "draft"}.${format}`, content, format === "md" ? "text/markdown" : "application/json"); setError("");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+  }
 
-          <div className="generate-row">
-            <button className="generate-button" type="button" onClick={handleGenerate} disabled={isGenerating}>
-              <span>{isGenerating ? "编辑部正在准备图文…" : "生成小红书图文包"}</span>
-              <span aria-hidden="true">↗</span>
-            </button>
-            <p>约 30 秒 · 当前为模拟生成</p>
-          </div>
-        </div>
+  return <main className="workbench-page">
+    <header className="masthead"><div className="brand-lockup"><span>H</span><div><strong>HerLit</strong><small>LIVE EDITORIAL WORKBENCH</small></div></div><div className={`mode-ribbon ${providerMode}`}>{providerMode === "mock" ? "MOCK DATA" : "LIVE SOURCES"}</div></header>
+    <section className="opening"><p className="folio">PHASE 2 · DAILY EDITION</p><h1>今天，写哪一位她？</h1><p>从日期出发，让候选、核验、写作与人工判断保持各自清晰。</p></section>
 
-        <aside className="today-card">
-          <span className="today-label">TODAY’S EDITION</span>
-          <div className="edition-date">
-            <strong>{new Date(`${date}T00:00:00`).getDate().toString().padStart(2, "0")}</strong>
-            <span>
-              {new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(`${date}T00:00:00`)).toUpperCase()}
-              <br />{new Date(`${date}T00:00:00`).getFullYear()}
-            </span>
-          </div>
-          <blockquote>“一个女人必须有钱和一间属于自己的房间。”</blockquote>
-          <p>— 弗吉尼亚·伍尔夫<br /><i>A Room of One’s Own</i>, 1929</p>
-          <div className="card-note">
-            <span>编辑提示</span>
-            <p>下一阶段将对日期、原文与引语出处进行资料核验，再进入写作。</p>
-          </div>
-        </aside>
-      </section>
+    <section className="date-desk paper-section"><div className="section-number">01</div><div className="date-primary"><label htmlFor="publication-date">Publication Date</label><input id="publication-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} /></div><button className="text-button" type="button" onClick={() => setInterventionOpen((value) => !value)}>Editor Intervention {interventionOpen ? "−" : "+"}</button>
+      {interventionOpen && <div className="intervention-grid"><label>指定人物<input value={candidateWriter} onChange={(event) => setCandidateWriter(event.target.value)} placeholder="可选" /></label><label>主题<input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="可选" /></label><label>风格<select value={style} onChange={(event) => setStyle(event.target.value)}>{STYLES.map((item) => <option key={item}>{item}</option>)}</select></label><label>排除 writer IDs<input value={excludeWriterIds} onChange={(event) => setExcludeWriterIds(event.target.value)} placeholder="逗号分隔" /></label></div>}
+      <button className="primary-action" type="button" onClick={discoverCandidates} disabled={busy !== null}>{busy === "selection" ? "正在发现候选…" : "生成今日候选"}<span>→</span></button>
+    </section>
+    {error && <aside className="error-note" role="alert"><strong>流程暂停</strong><span>{error}</span></aside>}
 
-      <section className="results-section">
-        <div className="section-intro">
-          <div>
-            <span className="section-kicker">DRAFT DESK</span>
-            <h2>今日内容包</h2>
-          </div>
-          <p>最后更新 · {generatedAt}</p>
-        </div>
+    {selection && selectionMeta && <section className="editorial-stage"><div className="stage-heading"><div><span>02 · SELECTION</span><h2>今日候选</h2></div><p>程序排名保留，先确认再研究。</p></div><div className="trace-line">{selectionMeta.discoveryTrace.map((entry) => <span key={entry.tier}>TIER {entry.tier} · {entry.discovered}</span>)}</div><div className="candidate-grid">{selection.candidateShortlist.map((candidate) => <article className={`candidate-card ${candidate.rank === 1 ? "pick" : ""}`} key={candidate.id}>{candidate.rank === 1 && <span className="pick-flag">TODAY&apos;S PICK</span>}<div className="candidate-rank">0{candidate.rank}</div><h3>{candidate.writer.name}</h3>{candidate.writer.originalName && <i>{candidate.writer.originalName}</i>}<p className="relation">{candidate.proposedWhyHerToday.shortReason}</p><dl><div><dt>Tier</dt><dd>{candidate.proposedWhyHerToday.tier}</dd></div><div><dt>Score</dt><dd>{candidate.score.weightedTotal}</dd></div><div><dt>Repeat</dt><dd>−{candidate.score.recentRepeatPenalty}</dd></div></dl><p>{candidate.editorialReason}</p><ul>{candidate.risks.map((risk) => <li key={risk}>{risk}</li>)}</ul><small>{candidate.provenance.providerMode.toUpperCase()} · {candidate.provenance.providerId}</small></article>)}</div><div className="decision-note"><div><strong>为什么选她</strong><p>{selection.selectionDecision.whySelected}</p></div><div><strong>为什么不是其他人</strong>{selection.selectionDecision.whyNotOthers.map((item) => <p key={item.candidateId}>{item.reason}</p>)}</div></div>{!confirmed ? <button className="primary-action compact" type="button" onClick={() => setConfirmed(true)}>确认 Today&apos;s Pick</button> : <button className="primary-action compact" type="button" onClick={startResearch} disabled={busy !== null}>{busy === "research" ? "正在核验资料…" : "开始资料核验"}</button>}</section>}
 
-        <div className="result-shell">
-          <nav className="result-tabs" aria-label="内容类型">
-            {tabs.map((tab) => (
-              <button
-                type="button"
-                key={tab.id}
-                className={activeTab === tab.id ? "result-tab active" : "result-tab"}
-                onClick={() => setActiveTab(tab.id)}
-              >
-                <span>{tab.count}</span>{tab.label}
-              </button>
-            ))}
-          </nav>
+    {research && <section className="editorial-stage research-stage"><div className="stage-heading"><div><span>03 · RESEARCH</span><h2>资料核验</h2></div><span className={`readiness ${research.readyForDraft ? "ready" : "blocked"}`}>{research.readyForDraft ? "READY FOR DRAFT" : "NOT READY"}</span></div><article className="why-panel"><span>WHY HER TODAY</span><h3>{research.proposedWhyHerToday.shortReason}</h3><p>{research.proposedWhyHerToday.editorExplanation}</p></article>{blockers.length > 0 && <div className="blocker-list"><strong>还缺什么</strong>{blockers.map((item) => <p key={item}>— {item}</p>)}</div>}<div className="claim-list">{research.claims.map((claim) => <article className="claim-row" key={claim.id}><div className={`claim-status ${claim.verificationStatus}`}>{claim.verificationStatus.replace("_", " ")}</div><div><span>{claim.category} · {claim.confidence}</span><h3>{claim.claim}</h3><p>{claim.verificationReason}</p>{claim.quoteContext && <p className="quote-context">Speaker: {claim.quoteContext.attributedSpeakerType} {claim.quoteContext.attributedSpeakerName ?? ""}</p>}<div className="evidence-list">{claim.evidence.map((evidence) => { const source = sourceById.get(evidence.sourceId); return <p key={`${claim.id}-${evidence.sourceId}`}><b>{evidence.support}</b> · {evidence.locator ?? "无 locator"} · {evidence.excerpt ?? "无 excerpt"} {source && <>· <a href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a></>}</p>; })}</div></div></article>)}</div><button className="primary-action compact" type="button" disabled={!research.readyForDraft || busy !== null} onClick={produceDraft}>{busy === "production" ? "正在生成编辑初稿…" : "生成编辑初稿"}</button></section>}
 
-          <article className="result-paper" data-result-content>
-            <div className="paper-toolbar">
-              <span className="draft-badge">模拟初稿</span>
-              <button type="button" onClick={copyCurrent}>{copied ? "已复制 ✓" : "复制全文"}</button>
-            </div>
-
-            {activeTab === "brief" && (
-              <div className="article-copy">
-                <p className="overline">{displayDate} · 今日小红书图文</p>
-                <h3>一个女人真正开始写作，要先拥有一间房吗？</h3>
-                <p className="lead">今天，我们从“{topic}”重新走近弗吉尼亚·伍尔夫。</p>
-                <p>她写下的不只是女性需要一间房，更是一个创作者必须拥有的条件：不被打断的时间、不被解释的欲望，以及把自己的经验视为值得书写之物的勇气。</p>
-                <p>近一个世纪后，这句话仍然在提醒我们：创作从来不只关乎灵感。它也关乎空间、资源，以及一个人是否被允许完整地成为自己。</p>
-                <div className="pull-quote">“真正的自由，也许始于不再为自己的声音请求许可。”</div>
-                <p className="hashtags">#女性文学　#女性作家　#弗吉尼亚伍尔夫　#阅读分享　#女性成长</p>
-                <p className="editor-note"><strong>编辑注：</strong>此页为界面演示稿。真实生成上线后，事实与引语会在交付前完成来源核验。</p>
-              </div>
-            )}
-
-            {activeTab === "writer" && (
-              <div className="article-copy writer-profile">
-                <p className="overline">WRITER FOCUS · 作家专题</p>
-                <h3>弗吉尼亚·伍尔夫<br /><i>Virginia Woolf</i></h3>
-                <div className="profile-grid">
-                  <div><span>生卒</span><strong>1882 — 1941</strong></div>
-                  <div><span>关键词</span><strong>意识流 · 空间 · 女性写作</strong></div>
-                </div>
-                <p>她把意识中最微小的波纹带进小说，也把“谁有资格写作”变成一项无法回避的公共追问。</p>
-                <h4>从哪里开始读</h4>
-                <ul>
-                  <li><i>Mrs Dalloway</i>（1925）—— 一天之内，时间与记忆彼此穿行。</li>
-                  <li><i>To the Lighthouse</i>（1927）—— 家庭、艺术与失去的漫长回声。</li>
-                  <li><i>A Room of One’s Own</i>（1929）—— 关于女性与写作的经典论述。</li>
-                </ul>
-              </div>
-            )}
-
-            {activeTab === "cards" && (
-              <div className="article-copy">
-                <p className="overline">XIAOHONGSHU CAROUSEL · 3:4</p>
-                <h3>今日图文卡片</h3>
-                <div className="card-preview-grid">
-                  <div className="social-card"><small>HERLIT · 今日女性文学</small><strong>一个女人<br />真正开始写作，<br />要先拥有一间房吗？</strong><span>Virginia Woolf · 1929</span></div>
-                  <div className="card-copy"><h4>封面 · 01</h4><p>正式生成时会自动制作封面、核心观点和作品书单三张 3:4 图片。</p><button type="button">保存图片将在下一步接入</button></div>
-                </div>
-              </div>
-            )}
-          </article>
-
-          <aside className="package-list">
-            <span className="section-kicker">本次生成</span>
-            {[
-              ["小红书正文", "已完成"],
-              ["3 个标题备选", "已完成"],
-              ["标签建议", "已完成"],
-              ["事实与引语", "待核验"],
-              ["3:4 配图卡片", "可保存"],
-              ["人工审核", "发布前必须"],
-            ].map(([label, status], index) => (
-              <div className="package-item" key={label}>
-                <span>{(index + 1).toString().padStart(2, "0")}</span>
-                <p>{label}<small>{status}</small></p>
-              </div>
-            ))}
-          </aside>
-        </div>
-      </section>
-
-      <footer>
-        <span>HerLit AI · HerLit 的 AI 内容编辑系统</span>
-        <span>阅读她们，也写下我们。</span>
-      </footer>
-    </main>
-  );
+    {editorialPackage && <section className="editorial-stage production-stage"><div className="stage-heading"><div><span>04 · PRODUCTION</span><h2>编辑初稿</h2></div><span className="draft-domain">DOMAIN STATUS · {editorialPackage.status.toUpperCase()}</span></div><div className="production-grid"><section><h3>Reader Value</h3>{editorialPackage.valueModules.map((module, index) => <article className="value-card" key={`${module.type}-${index}`}><span>{module.type}</span><input value={module.title} onChange={(event) => editPackage((next) => { next.valueModules[index].title = event.target.value; })} /><textarea value={module.content} onChange={(event) => editPackage((next) => { next.valueModules[index].content = event.target.value; })} /><p><b>Reader benefit</b> · {module.readerBenefit}</p><small>Evidence · {module.evidenceClaimIds.join(", ")}</small></article>)}</section><section><h3>Titles</h3>{editorialPackage.draft.titles.map((title, index) => <label className="title-choice" key={index}><input type="radio" checked={preferredTitle === index} onChange={() => setPreferredTitle(index)} /><input value={title.text} onChange={(event) => editPackage((next) => { next.draft.titles[index].text = event.target.value; })} /><small>{title.angle} · {title.evidenceClaimIds.join(", ")}</small></label>)}</section></div>
+      <section className="draft-section"><h3>Body · Draft Blocks</h3><div className="block-editor">{editorialPackage.draft.blocks.map((block, index) => <article key={block.id}><span>{block.role}</span><textarea value={block.text} onChange={(event) => editPackage((next) => { next.draft.blocks[index].text = event.target.value; next.draft.body = next.draft.blocks.map(({ text }) => text.trim()).join("\n\n"); })} /><details><summary>Evidence → Claim → Source</summary>{block.evidenceClaimIds.map((claimId) => { const claim = editorialPackage.verifiedContext.claims.find(({ id }) => id === claimId); return <div key={claimId}><b>{claim?.claim}</b>{claim?.evidence.map((evidence) => { const source = sourceById.get(evidence.sourceId); return source ? <a key={source.id} href={source.url} target="_blank" rel="noreferrer">{source.title} ↗</a> : null; })}</div>; })}</details></article>)}</div><div className="reading-view"><span>整篇阅读视图</span><h3>{editorialPackage.draft.titles[preferredTitle].text}</h3>{editorialPackage.draft.blocks.map((block) => <p key={block.id}>{block.text}</p>)}<p className="hashtags">{editorialPackage.draft.hashtags.join(" ")}</p></div></section>
+      <section className="cards-section"><h3>Cards · {editorialPackage.draft.cards.length}</h3><div className="cards-grid">{editorialPackage.draft.cards.map((card, index) => <article key={card.order}><span>0{card.order} · {card.role}</span><input value={card.title} onChange={(event) => editPackage((next) => { next.draft.cards[index].title = event.target.value; })} /><textarea value={card.copy} onChange={(event) => editPackage((next) => { next.draft.cards[index].copy = event.target.value; })} /><p>{card.visualDirection}</p></article>)}</div></section>
+      <section className="growth-section"><div className="growth-heading"><div><span>05 · GROWTH REVIEW</span><h3>{editorialPackage.review.recommendation}</h3></div>{reviewStale ? <strong className="stale">STALE · NEEDS RE-REVIEW</strong> : <strong className="current">CURRENT REVIEW</strong>}</div>{!reviewStale && <div className="growth-grid">{Object.entries(editorialPackage.review.growthNotes).map(([key, value]) => <article className={key === "followReason" ? "follow" : ""} key={key}><span>{key.replace("Reason", "")}</span><p>{value}</p></article>)}</div>}{editorialPackage.review.issues.map((issue) => <p className="issue" key={issue.code}>{issue.severity} · {issue.message}</p>)}{reviewStale && <button className="primary-action compact" type="button" onClick={rerunReview} disabled={busy !== null}>{busy === "review" ? "正在重新 Review…" : "重新运行 Review"}</button>}</section>
+      <section className="approval-section"><div><span>06 · HUMAN REVIEW</span><h3>{humanReview.status === "approved" ? "人工审核已通过" : "等待人工决定"}</h3>{humanReview.status === "approved" && <p>{humanReview.approvedBy} · {humanReview.approvedAt}</p>}</div><div className="approval-actions"><button type="button" onClick={approve} disabled={reviewStale || editorialPackage.review.recommendation !== "ready_for_human_review"}>人工审核通过</button><button type="button" onClick={() => exportFile("md", false)}>导出 DRAFT Markdown</button><button type="button" onClick={() => exportFile("json", false)}>导出 DRAFT JSON</button><button className="approved-export" type="button" disabled={humanReview.status !== "approved"} onClick={() => exportFile("md", true)}>导出发布版 Markdown</button><button className="approved-export" type="button" disabled={humanReview.status !== "approved"} onClick={() => exportFile("json", true)}>导出发布版 JSON</button></div><p className="no-publish">不自动发布 · 不发送到小红书</p></section>
+    </section>}
+    <footer><span>HerLit · 阅读她们，也写下我们。</span><span>Human review remains the publishing gate.</span></footer>
+  </main>;
 }

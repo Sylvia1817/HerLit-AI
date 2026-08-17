@@ -51,3 +51,10 @@ export function reviewedInputBindingsMatch(
     actual.fingerprint === expected.fingerprint
   );
 }
+
+export function isEditorialReviewStale(
+  binding: ReviewedInputBinding,
+  input: EditorialReviewInput,
+): boolean {
+  return !reviewedInputBindingsMatch(binding, buildReviewedInputBinding(input));
+}

@@ -9,7 +9,7 @@
     "dev": "node node_modules/vinext/dist/cli.js dev",
     "build": "node node_modules/vinext/dist/cli.js build",
     "start": "node node_modules/vinext/dist/cli.js start",
-    "test": "npm run build && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/editorial-selection.test.ts tests/research-verification.test.ts tests/editorial-production.test.ts",
+    "test": "npm run build && node --experimental-strip-types --test tests/rendered-html.test.mjs tests/editorial-selection.test.ts tests/research-verification.test.ts tests/editorial-production.test.ts tests/editorial-workbench.test.ts",
     "lint": "node node_modules/eslint/bin/eslint.js . --ignore-pattern dist --ignore-pattern .next",
     "typecheck:editorial": "node node_modules/typescript/bin/tsc -p tsconfig.editorial.json",
     "db:generate": "drizzle-kit generate"

@@ -12,7 +12,8 @@
 
 - 工作流始终是：AI 草稿 → 编辑审核 → 图片制作 → 发布准备。
 - 不自动发布到小红书；人工审核是不可绕过的硬门槛。
-- 当前前端仍是 Phase 1 模拟界面，候选、Research Pack 与成稿尚未接入真实接口。
+- 当前 MVP application runtime 是 TypeScript / Next server APIs，直接复用 Selection、Research 与 Production domain engines。
+- `backend/` 中的 FastAPI 仅保留 health scaffold，不是 Phase 2 主链路，也不复制 TypeScript 评分、核验或 grounding 规则。
 - 不在当前阶段开发用户注册、多租户、会员、支付、视频、Podcast、大型 CMS 或复杂 Agent Framework。
 - 视觉基调沿用深墨绿 `#183d32`、暖象牙白 `#f4f0e8` 与少量朱红 `#a4472f`。
 - 图片模型只负责无字背景或编辑视觉；中文、书名、年份和引语使用确定性排版。
@@ -36,6 +37,8 @@ Selection、Research 与写作严格分离：Selection 只能提出待核验 Evi
 ## 目录结构
 
 - `app/`：HerLit AI Web 界面。
+- `app/api/editorial/`：candidates、research、produce 与 re-review 的 TypeScript server routes。
+- `lib/editorial-workbench/`：应用编排、mock/live adapters、SSRF 防护、human approval 与 export。
 - `types/editorial.ts`：Phase 2 编辑领域类型与数量约束。
 - `prompts/`：选题、研究核验、读者价值、写作和编辑复核的分步规则。
 - `daily/`：已生成的每日审核包与视觉样例。
@@ -59,7 +62,17 @@ npm run dev
 ```bash
 npm run build
 npm test
+npm run lint
+npm run typecheck:editorial
 ```
+
+## Provider 配置
+
+默认 `EDITORIAL_PROVIDER_MODE=mock`，页面会明确显示 `MOCK DATA`。Live mode 通过 `.env.example` 中的 generic JSON model/search adapter 变量配置，不在仓库保存 secret，也不把供应商 response shape 写入领域类型。
+
+Live Research 的顺序是 Search → 安全 Source Fetch → Claim Extraction → 现有 Verification Policy。模型记忆不能成为 ResearchSource；所有 source 必须来自实际抓取、可追溯的 URL。
+
+当前 session 使用进程内短期存储，刷新或 server restart 后可重新运行流程；正式 content history database 不在 Step 5 范围内。
 
 ## 给协作者与 ChatGPT
 
@@ -68,7 +81,7 @@ npm test
 1. `ROADMAP.md`：当前步骤和不得越过的阶段边界。
 2. `types/editorial.ts`：编辑数据契约。
 3. `prompts/README.md`：分步 prompt 的职责与数据边界。
-4. `app/page.tsx`：当前模拟界面与后续接入点。
+4. `app/page.tsx`：Live Editorial Workbench 与人工审核入口。
 5. `daily/`：真实内容与视觉交付样例。
 
 请保留“先审核、后制作图片、绝不自动发布”的人工把关机制。安装、构建成功或模型返回不等于内容验收成功；最终仍需编辑检查选题逻辑、来源、事实、表达与品牌价值。
