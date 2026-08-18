@@ -6,15 +6,18 @@ import { POST as candidatesPost } from "../app/api/editorial/candidates/route.ts
 import { assertSelectionResult } from "../lib/editorial-selection/index.ts";
 import { ResearchVerificationEngine } from "../lib/research-verification/index.ts";
 import { assertDailyEditorialPackage, isEditorialReviewStale } from "../lib/editorial-production/index.ts";
+import { HttpJsonModelAdapter, HttpJsonSearchAdapter } from "../lib/editorial-workbench/live-adapters.ts";
 import type { JsonModelAdapter, EditorialSearchAdapter } from "../lib/editorial-workbench/live-adapters.ts";
 import { loadEditorialRuntimeConfig } from "../lib/editorial-workbench/config.ts";
+import { getEditorialDate } from "../lib/editorial-workbench/date.ts";
 import { OrchestrationError } from "../lib/editorial-workbench/errors.ts";
 import { approveEditorialPackage, exportEditorialJson, exportEditorialMarkdown } from "../lib/editorial-workbench/human-review.ts";
 import { LiveResearchEvidenceProvider } from "../lib/editorial-workbench/live-providers.ts";
 import { createMockProviderFactory } from "../lib/editorial-workbench/providers.ts";
 import type { WorkbenchProviderFactory } from "../lib/editorial-workbench/providers.ts";
-import { createSafeSourceFetcher } from "../lib/editorial-workbench/safe-fetch.ts";
+import { createSafeSourceFetcher, isPrivateAddress } from "../lib/editorial-workbench/safe-fetch.ts";
 import { EditorialWorkbenchService } from "../lib/editorial-workbench/service.ts";
+import { EditorialSessionStore } from "../lib/editorial-workbench/store.ts";
 
 const DATE = "2026-08-17";
 
@@ -162,27 +165,99 @@ test("I12: an automated Writer attempting approved is rejected", async () => {
   await assert.rejects(() => service.produce({ selectionId: candidates.meta.selectionId, researchId: research.meta.researchId }), /approved status/);
 });
 
-test("I13/I14/I15: human approval remains outer state and gates publish-ready exports", async () => {
+test("A1: a stale Draft cannot be approved and callers cannot override staleness", async () => {
   const { production } = await completeFlow();
-  const editing = { status: "editing" as const };
-  assert.equal(production.data.status, "draft");
-  assert.throws(() => exportEditorialMarkdown(production.data, editing, { preferredTitleIndex: 0, publishReady: true }), /human approval/);
-  assert.match(exportEditorialMarkdown(production.data, editing, { preferredTitleIndex: 0, publishReady: false }), /^# DRAFT/);
-  const approved = approveEditorialPackage(production.data, false, new Date("2026-08-17T10:00:00.000Z"));
-  assert.equal(production.data.status, "draft");
-  assert.equal(approved.status, "approved");
-  assert.match(exportEditorialMarkdown(production.data, approved, { preferredTitleIndex: 0, publishReady: true }), /TODAY'S PICK/);
-  assert.equal(JSON.parse(exportEditorialJson(production.data, approved, { preferredTitleIndex: 0, publishReady: true })).exportStatus, "APPROVED");
+  const edited = structuredClone(production.data);
+  edited.draft.blocks[0].text = "人工修改但没有重新 Review";
+  edited.draft.body = edited.draft.blocks.map(({ text }) => text.trim()).join("\n\n");
+  assert.throws(() => approveEditorialPackage(production.meta.packageId, edited), /binding|stale|review/i);
 });
 
-test("I16: safe source fetch rejects localhost, private IP and private redirect", async () => {
+test("A2: Approval A cannot export Package B", async () => {
+  const first = await completeFlow();
+  const second = await completeFlow();
+  const approval = approveEditorialPackage(first.production.meta.packageId, first.production.data);
+  assert.throws(
+    () => exportEditorialMarkdown(second.production.meta.packageId, second.production.data, approval, { preferredTitleIndex: 0, publishReady: true }),
+    /different package/,
+  );
+});
+
+test("A3: changing title, value, block or card invalidates old approval", async () => {
+  const { production } = await completeFlow();
+  const approval = approveEditorialPackage(production.meta.packageId, production.data);
+  for (const mutate of [
+    (value: typeof production.data) => { value.draft.titles[0].text += " 改"; },
+    (value: typeof production.data) => { value.valueModules[0].content += " 改"; },
+    (value: typeof production.data) => { value.draft.blocks[0].text += " 改"; value.draft.body = value.draft.blocks.map(({ text }) => text.trim()).join("\n\n"); },
+    (value: typeof production.data) => { value.draft.cards[0].copy += " 改"; },
+  ]) {
+    const changed = structuredClone(production.data);
+    mutate(changed);
+    assert.throws(() => exportEditorialJson(production.meta.packageId, changed, approval, { preferredTitleIndex: 0, publishReady: true }), /binding|stale|review/i);
+  }
+});
+
+test("A4: re-review clears prior approval until the editor approves again", async () => {
+  const { service, production } = await completeFlow();
+  await service.approve({ packageId: production.meta.packageId });
+  const edited = structuredClone(production.data);
+  edited.draft.blocks[0].text = "重新 review 的编辑内容";
+  edited.draft.body = edited.draft.blocks.map(({ text }) => text.trim()).join("\n\n");
+  await service.review({ packageId: production.meta.packageId, valueModules: edited.valueModules, draft: edited.draft });
+  await assert.rejects(
+    () => service.export({ packageId: production.meta.packageId, format: "json", preferredTitleIndex: 0, publishReady: true }),
+    /human approval/,
+  );
+});
+
+test("A5/A6: current review plus current approval exports while domain status stays draft", async () => {
+  const { service, production } = await completeFlow();
+  const editing = { status: "editing" as const };
+  assert.equal(production.data.status, "draft");
+  assert.match(exportEditorialMarkdown(production.meta.packageId, production.data, editing, { preferredTitleIndex: 0, publishReady: false }), /^# DRAFT/);
+  const approved = await service.approve({ packageId: production.meta.packageId });
+  assert.equal(approved.data.packageId, production.meta.packageId);
+  assert.equal(production.data.status, "draft");
+  const markdown = await service.export({ packageId: production.meta.packageId, format: "markdown", preferredTitleIndex: 0, publishReady: true });
+  const json = await service.export({ packageId: production.meta.packageId, format: "json", preferredTitleIndex: 0, publishReady: true });
+  assert.match(markdown.data.content, /TODAY'S PICK/);
+  assert.equal(JSON.parse(json.data.content).exportStatus, "APPROVED");
+});
+
+test("S1: a connection-time switch from public DNS to private IP is rejected", async () => {
+  const fetcher = createSafeSourceFetcher({ resolveHost: async () => ["93.184.216.34"], transport: async () => ({ response: new Response("ok", { headers: { "content-type": "text/plain" } }), connectedAddress: "10.0.0.8" }) });
+  await assert.rejects(() => fetcher("https://public.example/source"), /changed after validation/);
+});
+
+test("S2: hexadecimal IPv4-mapped IPv6 loopback is rejected", async () => {
+  assert.equal(isPrivateAddress("::ffff:7f00:1"), true);
+  const fetcher = createSafeSourceFetcher({ transport: async () => assert.fail("transport must not run") });
+  await assert.rejects(() => fetcher("http://[::ffff:7f00:1]/admin"), /Private/);
+});
+
+test("S3: public address and a separately bound safe redirect are allowed", async () => {
+  const addresses: Record<string, string> = { "public.example": "93.184.216.34", "safe.example": "1.1.1.1" };
   const fetcher = createSafeSourceFetcher({
-    resolveHost: async (hostname) => hostname === "public.example" ? ["93.184.216.34"] : ["127.0.0.1"],
-    fetchImpl: async () => new Response(null, { status: 302, headers: { location: "http://192.168.1.5/secret" } }),
+    resolveHost: async (hostname) => [addresses[hostname]],
+    transport: async ({ url, address }) => url.hostname === "public.example"
+      ? { response: new Response(null, { status: 302, headers: { location: "https://safe.example/final" } }), connectedAddress: address }
+      : { response: new Response("safe", { headers: { "content-type": "text/plain" } }), connectedAddress: address },
   });
-  await assert.rejects(() => fetcher("http://localhost/admin"), /localhost/);
-  await assert.rejects(() => fetcher("http://127.0.0.1/admin"), /Private/);
-  await assert.rejects(() => fetcher("https://public.example/source"), /Private/);
+  assert.equal((await fetcher("https://public.example/start")).text, "safe");
+});
+
+test("S4: redirect to a private target is rejected before connecting", async () => {
+  let connections = 0;
+  const fetcher = createSafeSourceFetcher({
+    resolveHost: async () => ["93.184.216.34"],
+    transport: async ({ address }) => {
+      connections += 1;
+      return { response: new Response(null, { status: 302, headers: { location: "http://10.1.2.3/private" } }), connectedAddress: address };
+    },
+  });
+  await assert.rejects(() => fetcher("https://public.example/start"), /Private/);
+  assert.equal(connections, 1);
 });
 
 test("I17: unavailable live configuration returns a structured stage error", () => {
@@ -197,6 +272,53 @@ test("I17: unavailable live configuration returns a structured stage error", () 
   } finally {
     process.env = before;
   }
+});
+
+test("editorial date uses Asia/Shanghai across the UTC date boundary and rejects impossible dates", async () => {
+  assert.equal(getEditorialDate(new Date("2026-08-17T15:59:59.000Z")), "2026-08-17");
+  assert.equal(getEditorialDate(new Date("2026-08-17T16:00:00.000Z")), "2026-08-18");
+  const service = new EditorialWorkbenchService({ providers: createMockProviderFactory() });
+  for (const date of ["2026-02-30", "2026-13-01"]) {
+    await assert.rejects(
+      () => service.candidates({ date }),
+      (error: unknown) => error instanceof OrchestrationError && error.code === "INVALID_EDITORIAL_DATE" && error.stage === "selection",
+    );
+  }
+});
+
+test("provider HTTP, timeout and invalid JSON errors retain the actual stage", async () => {
+  const config = { provider: "test", baseUrl: "https://provider.example", apiKey: "test", model: "test" };
+  const reviewAdapter = new HttpJsonModelAdapter({ ...config, fetchImpl: async () => new Response("failed", { status: 503 }) });
+  await assert.rejects(
+    () => reviewAdapter.generateJson("editorial_growth_review", {}),
+    (error: unknown) => error instanceof OrchestrationError && error.stage === "review" && error.retryable,
+  );
+  const productionAdapter = new HttpJsonModelAdapter({ ...config, fetchImpl: async () => new Response("not-json") });
+  await assert.rejects(
+    () => productionAdapter.generateJson("grounded_editorial_draft", {}),
+    (error: unknown) => error instanceof OrchestrationError && error.stage === "production" && error.code === "LIVE_PROVIDER_INVALID_RESPONSE" && !error.retryable,
+  );
+  const timeout = new Error("timeout"); timeout.name = "TimeoutError";
+  const searchAdapter = new HttpJsonSearchAdapter({ provider: "test", baseUrl: "https://search.example", apiKey: "test", fetchImpl: async () => { throw timeout; } });
+  await assert.rejects(
+    () => searchAdapter.search("writer"),
+    (error: unknown) => error instanceof OrchestrationError && error.stage === "research" && error.code === "LIVE_PROVIDER_TIMEOUT" && error.retryable,
+  );
+});
+
+test("EditorialSessionStore expires sessions and deterministically caps entries", async () => {
+  let now = 1_000;
+  const store = new EditorialSessionStore({ ttlMs: 100, maxEntries: 2, now: () => now });
+  const service = new EditorialWorkbenchService({ providers: createMockProviderFactory(), store });
+  await service.candidates({ date: DATE });
+  await service.candidates({ date: DATE });
+  const latest = await service.candidates({ date: DATE });
+  assert.equal(store.sizes().selections, 2);
+  now += 101;
+  await assert.rejects(
+    () => service.research({ selectionId: latest.meta.selectionId, candidateId: latest.data.selectedCandidate.id }),
+    (error: unknown) => error instanceof OrchestrationError && error.code === "SELECTION_SESSION_EXPIRED" && error.status === 410,
+  );
 });
 
 test("I18: live Research uses fetched URLs while mock provenance stays mock", async () => {
@@ -237,4 +359,44 @@ test("I18: live Research uses fetched URLs while mock provenance stays mock", as
   const mock = await completeFlow();
   assert.equal(mock.research.data.provider.mode, "mock");
   assert.ok(mock.research.data.sources.every(({ providerMode }) => providerMode === "mock"));
+});
+
+test("Live Research keeps safe sources when sibling fetches fail and records structured skips", async () => {
+  const model: JsonModelAdapter = {
+    id: "partial-model",
+    async generateJson<T>(task: string, input: unknown): Promise<T> {
+      if (task === "editorial_research_queries") return { queries: ["writer archive"] } as T;
+      const candidate = (input as { candidate: Candidate }).candidate;
+      const evidence = [{ sourceId: "live-source-2", support: "direct" as const }];
+      return {
+        sourceMetadata: [{ sourceId: "live-source-2", sourceType: "institution", title: "Usable archive" }],
+        claims: [
+          { id: "date", claim: "Date", category: "date_event", evidence },
+          { id: "bio", claim: "Bio", category: "bio", evidence },
+          { id: "work", claim: "Work", category: "work", evidence },
+          { id: "context", claim: "Context", category: "context", evidence },
+        ],
+        leadFindings: [{ evidenceLeadId: candidate.proposedWhyHerToday.evidenceLeads[0].id, researchClaimIds: ["date"] }],
+      } as T;
+    },
+  };
+  const search: EditorialSearchAdapter = { id: "partial-search", async search() { return [
+    { url: "https://blocked.example/source", title: "Blocked" },
+    { url: "https://archive.example/source", title: "Archive" },
+  ]; } };
+  const provider = new LiveResearchEvidenceProvider({
+    model,
+    search,
+    fetchSource: async (url) => {
+      if (url.includes("blocked")) throw new OrchestrationError({ stage: "research", code: "SOURCE_FETCH_FAILED", message: "HTTP 403", retryable: false });
+      return { url, contentType: "text/html", text: "usable source" };
+    },
+  });
+  const candidate = (await new EditorialWorkbenchService({ providers: createMockProviderFactory() }).candidates({ date: DATE })).data.selectedCandidate;
+  const pack = await new ResearchVerificationEngine(provider).research(candidate);
+  assert.equal(pack.sources.length, 1);
+  assert.equal(pack.sources[0].url, "https://archive.example/source");
+  assert.deepEqual(pack.retrievalDiagnostics?.skippedSources.map(({ code, url }) => ({ code, url })), [
+    { code: "SOURCE_FETCH_FAILED", url: "https://blocked.example/source" },
+  ]);
 });

@@ -5,6 +5,7 @@ import type {
   ResearchClaimCategory,
   ResearchProviderMode,
   ResearchSource,
+  SkippedResearchSource,
 } from "../../types/editorial.ts";
 
 export type ResearchClaimProposal = {
@@ -27,6 +28,7 @@ export type ResearchInvestigation = {
   sources: ResearchSource[];
   claimProposals: ResearchClaimProposal[];
   leadFindings: EvidenceLeadFinding[];
+  skippedSources?: SkippedResearchSource[];
 };
 
 export interface ResearchEvidenceProvider {

@@ -15,29 +15,48 @@ import {
   HERLIT_BRAND_RULES,
 } from "../editorial-production/index.ts";
 import { loadEditorialRuntimeConfig } from "./config.ts";
+import { assertEditorialDate } from "./date.ts";
 import { OrchestrationError, asOrchestrationError } from "./errors.ts";
+import {
+  approveEditorialPackage,
+  exportEditorialJson,
+  exportEditorialMarkdown,
+} from "./human-review.ts";
 import {
   createLiveProviderFactory,
   createMockProviderFactory,
 } from "./providers.ts";
 import type { WorkbenchProviderFactory } from "./providers.ts";
-import { EditorialSessionStore } from "./store.ts";
+import { EditorialSessionStore, SessionExpiredError } from "./store.ts";
 import type {
+  ApprovalResponse,
   CandidateApiMeta,
   CandidatesResponse,
   DiscoveryTraceEntry,
+  ExportRequest,
+  ExportResponse,
   ProductionResponse,
   ResearchResponse,
   ReviewResponse,
 } from "./types.ts";
 
 function validateRequest(request: EditorialRequest): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(request.date)) {
-    throw new OrchestrationError({ stage: "selection", code: "INVALID_REQUEST", message: "date must use YYYY-MM-DD", retryable: false });
-  }
+  assertEditorialDate(request.date);
   if (request.excludeWriterIds && !Array.isArray(request.excludeWriterIds)) {
     throw new OrchestrationError({ stage: "selection", code: "INVALID_REQUEST", message: "excludeWriterIds must be an array", retryable: false });
   }
+}
+
+function sessionError(stage: "research" | "production" | "review", error: unknown): never {
+  if (error instanceof SessionExpiredError) {
+    throw new OrchestrationError({
+      stage,
+      code: `${error.entity.toUpperCase()}_SESSION_EXPIRED`,
+      message: `${error.entity} session expired`,
+      retryable: true,
+    }, 410);
+  }
+  throw error;
 }
 
 export function researchReadinessDetails(pack: ResearchPack): string[] {
@@ -85,7 +104,8 @@ export class EditorialWorkbenchService {
 
   async research(input: { selectionId: string; candidateId: string; selection?: unknown }): Promise<ResearchResponse> {
     try {
-      const stored = this.store.getSelection(input.selectionId);
+      let stored;
+      try { stored = this.store.getSelection(input.selectionId); } catch (error) { sessionError("research", error); }
       if (!stored) throw new OrchestrationError({ stage: "research", code: "SELECTION_SESSION_NOT_FOUND", message: "Selection session expired or is unknown", retryable: true }, 404);
       const candidate = stored.selection.candidateShortlist.find(({ id }) => id === input.candidateId);
       if (!candidate) throw new OrchestrationError({ stage: "research", code: "CANDIDATE_NOT_IN_SHORTLIST", message: "Research candidate must belong to the server shortlist", retryable: false }, 422);
@@ -103,8 +123,12 @@ export class EditorialWorkbenchService {
 
   async produce(input: { selectionId: string; researchId: string; style?: string | null; selection?: unknown; researchPack?: unknown }): Promise<ProductionResponse> {
     try {
-      const storedSelection = this.store.getSelection(input.selectionId);
-      const storedResearch = this.store.getResearch(input.researchId);
+      let storedSelection;
+      let storedResearch;
+      try {
+        storedSelection = this.store.getSelection(input.selectionId);
+        storedResearch = this.store.getResearch(input.researchId);
+      } catch (error) { sessionError("production", error); }
       if (!storedSelection || !storedResearch || storedResearch.selectionId !== input.selectionId) {
         throw new OrchestrationError({ stage: "production", code: "EDITORIAL_SESSION_NOT_FOUND", message: "Selection or Research session expired", retryable: true }, 404);
       }
@@ -130,7 +154,8 @@ export class EditorialWorkbenchService {
 
   async review(input: { packageId: string; valueModules: ValueModuleCollection; draft: GroundedDraft }): Promise<ReviewResponse> {
     try {
-      const stored = this.store.getPackage(input.packageId);
+      let stored;
+      try { stored = this.store.getPackage(input.packageId); } catch (error) { sessionError("review", error); }
       if (!stored) throw new OrchestrationError({ stage: "review", code: "PACKAGE_SESSION_NOT_FOUND", message: "Editorial package session expired", retryable: true }, 404);
       const valueModules = structuredClone(input.valueModules);
       const draft = structuredClone(input.draft);
@@ -143,8 +168,58 @@ export class EditorialWorkbenchService {
       });
       const next = { ...stored.package, valueModules, draft, review };
       assertDailyEditorialPackage(next);
-      this.store.updatePackage(input.packageId, { ...stored, package: next });
+      this.store.updatePackage(input.packageId, { ...stored, package: next, approval: undefined });
       return { ok: true, data: structuredClone(next), meta: { packageId: input.packageId, providerMode: this.mode } };
+    } catch (error) {
+      throw asOrchestrationError("review", error);
+    }
+  }
+
+
+  async approve(input: { packageId: string }): Promise<ApprovalResponse> {
+    try {
+      if (typeof input.packageId !== "string" || !input.packageId) {
+        throw new OrchestrationError({ stage: "review", code: "INVALID_APPROVAL_REQUEST", message: "packageId is required", retryable: false }, 422);
+      }
+      let stored;
+      try { stored = this.store.getPackage(input.packageId); } catch (error) { sessionError("review", error); }
+      if (!stored) throw new OrchestrationError({ stage: "review", code: "PACKAGE_SESSION_NOT_FOUND", message: "Editorial package session expired or is unknown", retryable: true }, 404);
+      const approval = approveEditorialPackage(input.packageId, stored.package);
+      this.store.updatePackage(input.packageId, { ...stored, approval });
+      return { ok: true, data: structuredClone(approval), meta: { packageId: input.packageId, providerMode: this.mode } };
+    } catch (error) {
+      throw asOrchestrationError("review", error);
+    }
+  }
+
+  async export(input: ExportRequest): Promise<ExportResponse> {
+    try {
+      if (
+        typeof input.packageId !== "string" || !input.packageId ||
+        (input.format !== "markdown" && input.format !== "json") ||
+        !Number.isInteger(input.preferredTitleIndex) || input.preferredTitleIndex < 0 ||
+        typeof input.publishReady !== "boolean"
+      ) {
+        throw new OrchestrationError({ stage: "review", code: "INVALID_EXPORT_REQUEST", message: "Export request is invalid", retryable: false }, 422);
+      }
+      let stored;
+      try { stored = this.store.getPackage(input.packageId); } catch (error) { sessionError("review", error); }
+      if (!stored) throw new OrchestrationError({ stage: "review", code: "PACKAGE_SESSION_NOT_FOUND", message: "Editorial package session expired or is unknown", retryable: true }, 404);
+      const state = stored.approval ?? { status: "editing" as const };
+      const options = { preferredTitleIndex: input.preferredTitleIndex, publishReady: input.publishReady };
+      const isMarkdown = input.format === "markdown";
+      const content = isMarkdown
+        ? exportEditorialMarkdown(input.packageId, stored.package, state, options)
+        : exportEditorialJson(input.packageId, stored.package, state, options);
+      return {
+        ok: true,
+        data: {
+          content,
+          contentType: isMarkdown ? "text/markdown" : "application/json",
+          fileName: `herlit-${stored.package.date}-${input.publishReady ? "approved" : "draft"}.${isMarkdown ? "md" : "json"}`,
+        },
+        meta: { packageId: input.packageId, providerMode: this.mode },
+      };
     } catch (error) {
       throw asOrchestrationError("review", error);
     }

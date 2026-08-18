@@ -376,6 +376,9 @@ export class ResearchVerificationEngine {
         mode: this.evidenceProvider.mode,
       },
       sources: structuredClone(investigation.sources),
+      retrievalDiagnostics: investigation.skippedSources?.length
+        ? { skippedSources: structuredClone(investigation.skippedSources) }
+        : undefined,
       evidenceLeadResolutions,
       claims,
       verification: {

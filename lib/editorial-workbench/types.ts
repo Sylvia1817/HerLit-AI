@@ -4,6 +4,7 @@ import type {
   EditorialSelectionResult,
   GroundedDraft,
   ResearchPack,
+  ReviewedInputBinding,
   ValueModuleCollection,
 } from "../../types/editorial.ts";
 
@@ -55,6 +56,11 @@ export type ReviewApiMeta = {
   providerMode: EditorialProviderMode;
 };
 
+export type ApprovalApiMeta = {
+  packageId: string;
+  providerMode: EditorialProviderMode;
+};
+
 export type CandidatesRequest = EditorialRequest;
 export type CandidatesResponse = ApiSuccess<EditorialSelectionResult, CandidateApiMeta>;
 
@@ -84,7 +90,30 @@ export type ReviewResponse = ApiSuccess<DailyEditorialPackage, ReviewApiMeta>;
 export type HumanReviewState =
   | { status: "editing" }
   | { status: "ready_for_review" }
-  | { status: "approved"; approvedAt: string; approvedBy: "editor" };
+  | HumanApproval;
+
+export type HumanApproval = {
+  status: "approved";
+  packageId: string;
+  reviewBinding: ReviewedInputBinding;
+  approvedAt: string;
+  approvedBy: "editor";
+};
+
+export type ApprovalRequest = { packageId: string };
+export type ApprovalResponse = ApiSuccess<HumanApproval, ApprovalApiMeta>;
+
+export type ExportRequest = {
+  packageId: string;
+  format: "markdown" | "json";
+  preferredTitleIndex: number;
+  publishReady: boolean;
+};
+export type ExportResponse = ApiSuccess<{
+  content: string;
+  contentType: "text/markdown" | "application/json";
+  fileName: string;
+}, ApprovalApiMeta>;
 
 export type EditorialExportOptions = {
   preferredTitleIndex: number;

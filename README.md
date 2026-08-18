@@ -37,7 +37,7 @@ Selection、Research 与写作严格分离：Selection 只能提出待核验 Evi
 ## 目录结构
 
 - `app/`：HerLit AI Web 界面。
-- `app/api/editorial/`：candidates、research、produce 与 re-review 的 TypeScript server routes。
+- `app/api/editorial/`：candidates、research、produce、re-review、human approval 与 export 的 TypeScript server routes。
 - `lib/editorial-workbench/`：应用编排、mock/live adapters、SSRF 防护、human approval 与 export。
 - `types/editorial.ts`：Phase 2 编辑领域类型与数量约束。
 - `prompts/`：选题、研究核验、读者价值、写作和编辑复核的分步规则。
@@ -72,7 +72,9 @@ npm run typecheck:editorial
 
 Live Research 的顺序是 Search → 安全 Source Fetch → Claim Extraction → 现有 Verification Policy。模型记忆不能成为 ResearchSource；所有 source 必须来自实际抓取、可追溯的 URL。
 
-当前 session 使用进程内短期存储，刷新或 server restart 后可重新运行流程；正式 content history database 不在 Step 5 范围内。
+当前 session 使用带 TTL 与容量上限的进程内短期存储，刷新、过期或 server restart 后可重新运行流程；正式 content history database 不在 Step 5 范围内。Human approval 由 server 绑定 package ID 与当前 review fingerprint，发布版导出会重新校验 package invariants、review freshness 与 approval binding。
+
+编辑日期固定按 `Asia/Shanghai` 计算并验证真实日历日期。Live Source Fetch 将 DNS 验证结果绑定到实际连接 IP，每次 redirect 都重新解析、验证并绑定；单个来源失败只产生结构化 skip diagnostic，不会丢弃同批安全来源。
 
 ## 给协作者与 ChatGPT
 

@@ -1,30 +1,79 @@
 import type { DailyEditorialPackage } from "../../types/editorial.ts";
-import type { EditorialExportOptions, HumanReviewState } from "./types.ts";
+import {
+  assertDailyEditorialPackage,
+  isEditorialReviewStale,
+  reviewedInputBindingsMatch,
+} from "../editorial-production/index.ts";
+import type { EditorialExportOptions, HumanApproval, HumanReviewState } from "./types.ts";
 
 export function approveEditorialPackage(
+  packageId: string,
   editorialPackage: DailyEditorialPackage,
-  reviewIsStale: boolean,
   now = new Date(),
-): HumanReviewState {
+): HumanApproval {
+  assertDailyEditorialPackage(editorialPackage);
   if (editorialPackage.status !== "draft") throw new Error("Domain package status must remain draft");
-  if (reviewIsStale || editorialPackage.review.recommendation !== "ready_for_human_review") {
+  if (
+    isEditorialReviewStale(editorialPackage.review.reviewedInputBinding, {
+      context: editorialPackage.verifiedContext,
+      valueModules: editorialPackage.valueModules,
+      draft: editorialPackage.draft,
+    }) ||
+    editorialPackage.review.recommendation !== "ready_for_human_review"
+  ) {
     throw new Error("A current ready_for_human_review result is required before approval");
   }
-  return { status: "approved", approvedAt: now.toISOString(), approvedBy: "editor" };
+  return {
+    status: "approved",
+    packageId,
+    reviewBinding: structuredClone(editorialPackage.review.reviewedInputBinding),
+    approvedAt: now.toISOString(),
+    approvedBy: "editor",
+  };
 }
 
-function assertExportAllowed(state: HumanReviewState, publishReady: boolean): void {
-  if (publishReady && state.status !== "approved") {
+export function assertApprovalCurrent(
+  packageId: string,
+  editorialPackage: DailyEditorialPackage,
+  approval: HumanApproval | undefined,
+): asserts approval is HumanApproval {
+  assertDailyEditorialPackage(editorialPackage);
+  if (!approval || approval.status !== "approved") {
     throw new Error("Publish-ready export requires explicit human approval");
+  }
+  if (approval.packageId !== packageId) throw new Error("Human approval belongs to a different package");
+  if (!reviewedInputBindingsMatch(approval.reviewBinding, editorialPackage.review.reviewedInputBinding)) {
+    throw new Error("Human approval is stale for the current review revision");
+  }
+  if (isEditorialReviewStale(editorialPackage.review.reviewedInputBinding, {
+    context: editorialPackage.verifiedContext,
+    valueModules: editorialPackage.valueModules,
+    draft: editorialPackage.draft,
+  })) {
+    throw new Error("Current Editorial Review is stale");
+  }
+}
+
+function assertExportAllowed(
+  packageId: string,
+  editorialPackage: DailyEditorialPackage,
+  state: HumanReviewState,
+  publishReady: boolean,
+): void {
+  if (publishReady) {
+    assertApprovalCurrent(packageId, editorialPackage, state.status === "approved" ? state : undefined);
+  } else {
+    assertDailyEditorialPackage(editorialPackage);
   }
 }
 
 export function exportEditorialMarkdown(
+  packageId: string,
   editorialPackage: DailyEditorialPackage,
   state: HumanReviewState,
   options: EditorialExportOptions,
 ): string {
-  assertExportAllowed(state, options.publishReady);
+  assertExportAllowed(packageId, editorialPackage, state, options.publishReady);
   const title = editorialPackage.draft.titles[options.preferredTitleIndex] ?? editorialPackage.draft.titles[0];
   const prefix = options.publishReady ? "" : "# DRAFT — 待人工审核\n\n";
   const sources = editorialPackage.researchAudit.sources
@@ -37,11 +86,12 @@ export function exportEditorialMarkdown(
 }
 
 export function exportEditorialJson(
+  packageId: string,
   editorialPackage: DailyEditorialPackage,
   state: HumanReviewState,
   options: EditorialExportOptions,
 ): string {
-  assertExportAllowed(state, options.publishReady);
+  assertExportAllowed(packageId, editorialPackage, state, options.publishReady);
   return JSON.stringify({
     exportStatus: options.publishReady ? "APPROVED" : "DRAFT",
     humanReview: state,

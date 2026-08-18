@@ -84,6 +84,15 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - Human approval 是 DailyEditorialPackage 外层状态；自动领域状态仍为 draft，批准后仅允许 Markdown/JSON 导出，不自动发布。
 - 当前 persistence 为进程内 editor session；未引入用户、权限、CMS 或 content history database。
 
+### Step 5.1：Workbench runtime 边界修复（已实现，待 review）
+
+- Human approval 与 package ID、review revision/fingerprint 绑定；approve/export 均由 server session 执行，客户端不能铸造 approved。
+- Safe Source Fetch 使用经过验证的固定连接 IP，核对实际 remote address，并对每次 redirect 重新绑定，防止 DNS rebinding。
+- 默认编辑时区固定为 Asia/Shanghai，server 拒绝格式正确但不存在的日历日期。
+- Live Research 对 Search/Fetch 使用受控 partial-success，并保留结构化 skipped-source diagnostics。
+- Live adapter 的 HTTP、timeout 与 invalid JSON errors 保留真实 selection/research/production/review stage。
+- 进程内 EditorialSessionStore 增加 TTL、确定性容量上限与明确 session-expired errors。
+
 ## 暂不开发
 
 - 用户注册、登录、多租户

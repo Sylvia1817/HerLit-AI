@@ -171,6 +171,14 @@ export type ResearchSource = {
   providerMode: ResearchProviderMode;
 };
 
+export type SkippedResearchSource = {
+  url: string;
+  title?: string;
+  code: string;
+  message: string;
+  retryable: boolean;
+};
+
 export type ClaimEvidence = {
   sourceId: string;
   support: "direct" | "indirect" | "contradicts";
@@ -253,6 +261,9 @@ type ResearchPackBase = {
     mode: ResearchProviderMode;
   };
   sources: ResearchSource[];
+  retrievalDiagnostics?: {
+    skippedSources: SkippedResearchSource[];
+  };
   evidenceLeadResolutions: EvidenceLeadResolution[];
   claims: ResearchClaim[];
   verification: {

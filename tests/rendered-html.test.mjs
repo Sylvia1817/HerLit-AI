@@ -93,4 +93,13 @@ test("built server runtime executes the complete mock API flow including review 
   assert.equal(production.data.status, "draft");
   assert.equal(production.data.review.reviewedInputBinding.algorithm, "sha256");
   assert.match(production.data.review.reviewedInputBinding.fingerprint, /^[a-f0-9]{64}$/);
+  const approval = await post("/api/editorial/approve", { packageId: production.meta.packageId });
+  assert.equal(approval.data.packageId, production.meta.packageId);
+  const exported = await post("/api/editorial/export", {
+    packageId: production.meta.packageId,
+    format: "json",
+    preferredTitleIndex: 0,
+    publishReady: true,
+  });
+  assert.equal(JSON.parse(exported.data.content).exportStatus, "APPROVED");
 });

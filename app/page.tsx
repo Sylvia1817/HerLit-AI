@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { DailyEditorialPackage, EditorialSelectionResult, ResearchPack } from "../types/editorial.ts";
-import type { ApiFailure, CandidateApiMeta, HumanReviewState, ProductionApiMeta, ResearchApiMeta } from "../lib/editorial-workbench/types.ts";
-import { approveEditorialPackage, exportEditorialJson, exportEditorialMarkdown } from "../lib/editorial-workbench/human-review.ts";
+import type { ApiFailure, ApprovalResponse, CandidateApiMeta, ExportResponse, HumanReviewState, ProductionApiMeta, ResearchApiMeta, ReviewApiMeta } from "../lib/editorial-workbench/types.ts";
+import { getEditorialDate } from "../lib/editorial-workbench/date.ts";
 
 type BusyStage = "selection" | "research" | "production" | "review" | null;
 const STYLES = ["克制 · 文学", "温柔 · 叙事", "锐利 · 评论", "轻盈 · 社交"];
@@ -25,7 +25,7 @@ function download(name: string, content: string, type: string) {
 }
 
 export default function Home() {
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => getEditorialDate());
   const [topic, setTopic] = useState("");
   const [candidateWriter, setCandidateWriter] = useState("");
   const [style, setStyle] = useState(STYLES[0]);
@@ -89,23 +89,30 @@ export default function Home() {
   async function rerunReview() {
     if (!editorialPackage || !productionMeta) return;
     await run("review", async () => {
-      const result = await postJson<{ ok: true; data: DailyEditorialPackage; meta: ProductionApiMeta }>("/api/editorial/review", { packageId: productionMeta.packageId, valueModules: editorialPackage.valueModules, draft: editorialPackage.draft });
+      const result = await postJson<{ ok: true; data: DailyEditorialPackage; meta: ReviewApiMeta }>("/api/editorial/review", { packageId: productionMeta.packageId, valueModules: editorialPackage.valueModules, draft: editorialPackage.draft });
       setEditorialPackage(result.data); setReviewStale(false); setHumanReview({ status: "ready_for_review" });
     });
   }
 
-  function approve() {
-    if (!editorialPackage) return;
-    try { setHumanReview(approveEditorialPackage(editorialPackage, reviewStale)); setError(""); } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+  async function approve() {
+    if (!editorialPackage || !productionMeta) return;
+    await run("review", async () => {
+      const result = await postJson<ApprovalResponse>("/api/editorial/approve", { packageId: productionMeta.packageId });
+      setHumanReview(result.data);
+    });
   }
 
-  function exportFile(format: "md" | "json", publishReady: boolean) {
-    if (!editorialPackage) return;
-    try {
-      const options = { preferredTitleIndex: preferredTitle, publishReady };
-      const content = format === "md" ? exportEditorialMarkdown(editorialPackage, humanReview, options) : exportEditorialJson(editorialPackage, humanReview, options);
-      download(`herlit-${date}-${publishReady ? "approved" : "draft"}.${format}`, content, format === "md" ? "text/markdown" : "application/json"); setError("");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+  async function exportFile(format: "md" | "json", publishReady: boolean) {
+    if (!editorialPackage || !productionMeta) return;
+    await run("review", async () => {
+      const result = await postJson<ExportResponse>("/api/editorial/export", {
+        packageId: productionMeta.packageId,
+        format: format === "md" ? "markdown" : "json",
+        preferredTitleIndex: preferredTitle,
+        publishReady,
+      });
+      download(result.data.fileName, result.data.content, result.data.contentType);
+    });
   }
 
   return <main className="workbench-page">

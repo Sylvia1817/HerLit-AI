@@ -5,6 +5,7 @@ import type {
   EditorialRequest,
   ResearchSource,
   ResearchSourceType,
+  SkippedResearchSource,
   VerifiedEditorialContext,
   WriterInput,
 } from "../../types/editorial.ts";
@@ -36,6 +37,7 @@ import type {
   LiveWriterPayload,
 } from "./live-adapters.ts";
 import type { FetchedSource } from "./safe-fetch.ts";
+import { OrchestrationError } from "./errors.ts";
 
 const SOURCE_TYPES = new Set<ResearchSourceType>([
   "official", "institution", "library", "publisher", "reputable_media", "secondary",
@@ -126,16 +128,46 @@ export class LiveResearchEvidenceProvider implements ResearchEvidenceProvider {
     );
     const queries = Array.isArray(queryPayload.queries) ? queryPayload.queries.slice(0, 4) : [];
     if (queries.length === 0) throw new Error("Live research produced no search queries");
-    const results = (await Promise.all(queries.map((query) => this.search.search(query))))
-      .flat()
+    const searchAttempts = await Promise.allSettled(queries.map((query) => this.search.search(query)));
+    const searchSkips: SkippedResearchSource[] = searchAttempts.flatMap((attempt, index) =>
+      attempt.status === "fulfilled" ? [] : [{
+        url: `search:${queries[index]}`,
+        code: attempt.reason instanceof OrchestrationError ? attempt.reason.code : "SEARCH_FAILED",
+        message: attempt.reason instanceof Error ? attempt.reason.message : "Search failed",
+        retryable: attempt.reason instanceof OrchestrationError ? attempt.reason.retryable : true,
+      }],
+    );
+    const results = searchAttempts
+      .flatMap((attempt) => attempt.status === "fulfilled" ? [...attempt.value] : [])
       .filter((result, index, all) => all.findIndex(({ url }) => url === result.url) === index)
       .slice(0, 6);
-    const fetched = await Promise.all(results.map(async (result, index) => ({
+    const fetchAttempts = await Promise.allSettled(results.map(async (result, index) => ({
       id: `live-source-${index + 1}`,
       result,
       page: await this.fetchSource(result.url),
     })));
-    if (fetched.length === 0) throw new Error("Live research found no fetchable sources");
+    const fetched = fetchAttempts.flatMap((attempt) => attempt.status === "fulfilled" ? [attempt.value] : []);
+    const fetchSkips: SkippedResearchSource[] = fetchAttempts.flatMap((attempt, index) => {
+      if (attempt.status === "fulfilled") return [];
+      const reason = attempt.reason;
+      return [{
+        url: results[index].url,
+        title: results[index].title,
+        code: reason instanceof OrchestrationError ? reason.code : "SOURCE_FETCH_FAILED",
+        message: reason instanceof Error ? reason.message : "Source fetch failed",
+        retryable: reason instanceof OrchestrationError ? reason.retryable : true,
+      }];
+    });
+    const skippedSources = [...searchSkips, ...fetchSkips];
+    if (fetched.length === 0) {
+      throw new OrchestrationError({
+        stage: "research",
+        code: "NO_USABLE_RESEARCH_SOURCES",
+        message: "Live research found no safe, fetchable sources",
+        retryable: skippedSources.some(({ retryable }) => retryable),
+        details: { skippedSources },
+      }, 422);
+    }
     const extraction = await this.model.generateJson<ExtractionPayload>(
       "editorial_claim_extraction",
       {
@@ -169,6 +201,7 @@ export class LiveResearchEvidenceProvider implements ResearchEvidenceProvider {
       sources,
       claimProposals: structuredClone(extraction.claims ?? []),
       leadFindings: structuredClone(extraction.leadFindings ?? []),
+      skippedSources,
     };
   }
 }
