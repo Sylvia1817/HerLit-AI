@@ -1,0 +1,45 @@
+name: HerLit CI
+
+# Validate code changes. This workflow does not generate or publish content.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: herlit-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Typecheck, lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      EDITORIAL_PROVIDER_MODE: mock
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck editorial domain
+        run: npm run typecheck:editorial
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build and run tests
+        run: npm test
