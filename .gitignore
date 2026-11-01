@@ -58,3 +58,6 @@ Thumbs.db
 /project-data/imagegen-source/
 /project-data/outputs/*.png
 /素材/**/*.png
+
+# browser regression artifacts
+/test-results/

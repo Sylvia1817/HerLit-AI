@@ -87,3 +87,9 @@ Live Research 的顺序是 Search → 安全 Source Fetch → Claim Extraction �
 5. `daily/`：真实内容与视觉交付样例。
 
 请保留“先审核、后制作图片、绝不自动发布”的人工把关机制。安装、构建成功或模型返回不等于内容验收成功；最终仍需编辑检查选题逻辑、来源、事实、表达与品牌价值。
+
+## CI 与合并验收
+
+CI 检查领域类型、lint、生产构建与回归测试，另运行真实浏览器的 mock 编辑审核流程及 Git 历史 secret 扫描。新增 TypeScript 测试通过 `tests/*.test.ts` 自动发现。
+
+管理员需要将 `Typecheck, lint and tests`、`Browser approval flow`、`Secret scan` 设置为 `main` 的必需检查；workflow 本身不会开启分支保护。配置步骤、失败门禁验收与尚未覆盖的内容语义边界见 [CI gates](docs/ci-gates.md)。
