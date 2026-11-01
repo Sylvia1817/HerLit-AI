@@ -43,3 +43,55 @@ jobs:
 
       - name: Build and run tests
         run: npm test
+
+  browser:
+    name: Browser approval flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EDITORIAL_PROVIDER_MODE: mock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Build
+        run: npm run build
+      - name: Run browser regression
+        run: |
+          npm run start -- --host 127.0.0.1 --port 4173 > /tmp/herlit-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              npm run test:browser
+              exit $?
+            fi
+            sleep 1
+          done
+          cat /tmp/herlit-server.log
+          exit 1
+      - name: Upload browser failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-failure
+          path: test-results/
+          if-no-files-found: ignore
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
