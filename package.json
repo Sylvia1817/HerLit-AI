@@ -13,7 +13,8 @@
     "lint": "node node_modules/eslint/bin/eslint.js . --ignore-pattern dist --ignore-pattern .next",
     "typecheck:editorial": "node node_modules/typescript/bin/tsc -p tsconfig.editorial.json",
     "db:generate": "drizzle-kit generate",
-    "test:browser": "node --test tests/browser-flow.test.mjs"
+    "test:browser": "node --test tests/browser-flow.test.mjs",
+    "smoke:live": "node --experimental-strip-types --env-file-if-exists=.env scripts/live-smoke.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

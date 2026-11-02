@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DailyEditorialPackage, EditorialSelectionResult, ResearchPack } from "../types/editorial.ts";
 import type { ApiFailure, ApprovalResponse, CandidateApiMeta, ExportResponse, HumanReviewState, ProductionApiMeta, ResearchApiMeta, ReviewApiMeta } from "../lib/editorial-workbench/types.ts";
 import { getEditorialDate } from "../lib/editorial-workbench/date.ts";
+import type { ProviderDiagnostics } from "../lib/editorial-workbench/diagnostics.ts";
 
 type BusyStage = "selection" | "research" | "production" | "review" | null;
 const STYLES = ["克制 · 文学", "温柔 · 叙事", "锐利 · 评论", "轻盈 · 社交"];
@@ -43,7 +44,16 @@ export default function Home() {
   const [humanReview, setHumanReview] = useState<HumanReviewState>({ status: "editing" });
   const [busy, setBusy] = useState<BusyStage>(null);
   const [error, setError] = useState("");
-  const providerMode = selectionMeta?.providerMode ?? "mock";
+  const [runtime, setRuntime] = useState<ProviderDiagnostics>();
+  useEffect(() => {
+    let active = true;
+    fetch("/api/editorial/health", { cache: "no-store" })
+      .then((response) => response.json() as Promise<{ data?: ProviderDiagnostics }>)
+      .then((payload) => { if (active) setRuntime(payload.data); })
+      .catch(() => { if (active) setRuntime(undefined); });
+    return () => { active = false; };
+  }, []);
+  const providerMode = selectionMeta?.providerMode ?? runtime?.mode ?? "mock";
 
   const sourceById = useMemo(() => new Map(research?.sources.map((source) => [source.id, source]) ?? []), [research]);
   const blockers = useMemo(() => {
@@ -116,7 +126,7 @@ export default function Home() {
   }
 
   return <main className="workbench-page">
-    <header className="masthead"><div className="brand-lockup"><span>H</span><div><strong>HerLit</strong><small>LIVE EDITORIAL WORKBENCH</small></div></div><div className={`mode-ribbon ${providerMode}`}>{providerMode === "mock" ? "MOCK DATA" : "LIVE SOURCES"}</div></header>
+    <header className="masthead"><div className="brand-lockup"><span>H</span><div><strong>HerLit</strong><small>LIVE EDITORIAL WORKBENCH</small></div></div><div className="provider-status">{runtime?.mode === "live" && <span className="provider-hint">{runtime.ready && runtime.model ? `${runtime.model.protocol} · ${runtime.model.model}` : runtime.missing.length > 0 ? `缺少环境变量：${runtime.missing.join("、")}` : runtime.issues[0]?.code ?? "配置待检查"}</span>}<div className={`mode-ribbon ${providerMode}`}>{providerMode === "mock" ? "MOCK DATA" : "LIVE SOURCES"}</div></div></header>
     <section className="opening"><p className="folio">PHASE 2 · DAILY EDITION</p><h1>今天，写哪一位她？</h1><p>从日期出发，让候选、核验、写作与人工判断保持各自清晰。</p></section>
 
     <section className="date-desk paper-section"><div className="section-number">01</div><div className="date-primary"><label htmlFor="publication-date">Publication Date</label><input id="publication-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} /></div><button className="text-button" type="button" onClick={() => setInterventionOpen((value) => !value)}>Editor Intervention {interventionOpen ? "−" : "+"}</button>

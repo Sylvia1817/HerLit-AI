@@ -43,3 +43,7 @@ editorial_selection.md
 - 所有自动生成结果保持 `draft`；只有人工编辑可以改为 `approved`。
 
 `xiaohongshu_daily.md` 仅保留为旧入口迁移说明，不再承载完整生成规则。
+
+## 运行时任务契约
+
+Live model adapter 实际发送给模型的 system prompt 与 JSON schema 位于 `lib/editorial-workbench/live/tasks.ts`，它把本目录五段规则压缩成可机器校验的契约；`live/normalize.ts` 负责程序侧校验与确定性修复。修改本目录的数据边界时，必须同步更新这两处，否则模型输出会被判定为 `LIVE_CONTENT_CONTRACT_VIOLATION`。

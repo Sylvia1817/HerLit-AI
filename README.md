@@ -66,15 +66,30 @@ npm run lint
 npm run typecheck:editorial
 ```
 
+用真实服务跑一次完整链路（不写库、不发布）：
+
+```bash
+npm run smoke:live -- --date 2026-11-02
+```
+
 ## Provider 配置
 
-默认 `EDITORIAL_PROVIDER_MODE=mock`，页面会明确显示 `MOCK DATA`。Live mode 通过 `.env.example` 中的 generic JSON model/search adapter 变量配置，不在仓库保存 secret，也不把供应商 response shape 写入领域类型。
+默认 `EDITORIAL_PROVIDER_MODE=mock`，页面会明确显示 `MOCK DATA`。Live mode 需要两类外部服务：一个模型服务（OpenAI 兼容 chat 或 Anthropic Messages）与一个搜索服务（Brave / Tavily / Serper，或自建 normalized search），以及可访问公网来源的 outbound HTTPS。密钥只放在本地环境变量，不在仓库保存 secret，也不把供应商 response shape 写入领域类型。
 
-Live Research 的顺序是 Search → 安全 Source Fetch → Claim Extraction → 现有 Verification Policy。模型记忆不能成为 ResearchSource；所有 source 必须来自实际抓取、可追溯的 URL。
+协议必须显式声明，不能把任意模型 API 地址直接填进原有的 generic JSON task 协议：
 
-当前 session 使用带 TTL 与容量上限的进程内短期存储，刷新、过期或 server restart 后可重新运行流程；正式 content history database 不在 Step 5 范围内。Human approval 由 server 绑定 package ID 与当前 review fingerprint，发布版导出会重新校验 package invariants、review freshness 与 approval binding。
+| 变量 | 取值 |
+| --- | --- |
+| `EDITORIAL_MODEL_PROTOCOL` | `generic_json`（默认，HerLit JSON task 服务）/ `openai_chat` / `anthropic_messages` |
+| `EDITORIAL_SEARCH_PROTOCOL` | `generic_json`（默认）/ `brave` / `tavily` / `serper` |
 
-编辑日期固定按 `Asia/Shanghai` 计算并验证真实日历日期。Live Source Fetch 将 DNS 验证结果绑定到实际连接 IP，每次 redirect 都重新解析、验证并绑定；单个来源失败只产生结构化 skip diagnostic，不会丢弃同批安全来源。
+`generic_json` 期望的是 `{model, task, input}` → `{data}` 的自有任务服务，不是 LLM API；若 base URL 明显属于某个供应商而协议仍是 `generic_json`，配置会直接以 `LIVE_PROVIDER_CONFIG_MISMATCH` 失败，而不是给出难以诊断的解析错误。
+
+每个任务都经过同一管线：任务 prompt → JSON 抽取 → 确定性归一化 → 一次携带违反项的重试 → 领域校验。归一化只修复程序所有字段（必需 hashtag、卡片顺序、`draft` 状态、quote 归属）并丢弃不可信输入（未抓取的 sourceId、非法类别），绝不补写编辑内容；无法修复时返回 `LIVE_CONTENT_CONTRACT_VIOLATION` 并列出具体违反项。
+
+Live Research 的顺序仍是 Search → 安全 Source Fetch → Claim Extraction → 现有 Verification Policy，另外把抓取结果做 HTML 转文本、按声明 charset 解码，并限制每个任务的来源数量与字符预算。模型记忆不能成为 ResearchSource；所有 source 必须来自实际抓取、可追溯的 URL。
+
+`/api/editorial/health` 与工作台页头会显示当前 mode、协议、模型名与端点 host（不含密钥），并列出缺失的变量；CI 覆盖协议形状、归一化与一条真实 adapter 的完整流程（使用假传输），但不调用付费服务。完整配置示例、错误码与已知边界见 [Live providers](docs/live-providers.md)。
 
 ## 给协作者与 ChatGPT
 
