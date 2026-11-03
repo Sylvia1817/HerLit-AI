@@ -93,7 +93,25 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - Live adapter 的 HTTP、timeout 与 invalid JSON errors 保留真实 selection/research/production/review stage。
 - 进程内 EditorialSessionStore 增加 TTL、确定性容量上限与明确 session-expired errors。
 
-## 暂不开发
+### Step 6：真实模型与搜索接入（已实现，待真实 key 验收）
+
+- 保留 `generic_json` 协议，同时新增 `openai_chat` 与 `anthropic_messages` 模型适配器，以及 `brave` / `tavily` / `serper` 搜索适配器；协议必须显式声明，供应商 URL 配错协议时以 `LIVE_PROVIDER_CONFIG_MISMATCH` 失败。
+- 每个任务统一走任务 prompt → JSON 抽取 → 确定性归一化 → 一次修复重试 → 领域校验；程序所有字段（必需 hashtag、卡片顺序、`draft` 状态、quote 归属、tier 语义）由程序重算，绝不通过模型输出决定。
+- 协议升级后仍保持原有边界：不因模型给出 `verified` 而放行，不补写事实，丢弃引用未抓取 sourceId 的证据，缺失的 Evidence Lead 记为 `needs_review`。
+- Research 抓取增加 HTML 转文本、声明 charset 解码、来源多样化与字符预算（每来源 12k、合计 48k、最多 5 个来源）。
+- 新增 `/api/editorial/health` 与工作台状态条，只暴露 mode、协议、模型名、端点 host 与缺失变量名，绝不返回密钥或上游 body。
+- 新增 `npm run smoke:live`：以只读方式跑完 candidates → research → produce，输出到 `runtime/`，不批准、不发布。
+- 仍为进程内 session，没有 content history database；`recentRepeatPenalty` 在 live 模式下仍无真实历史可用。
+- 真实 key、真实来源与文学准确性验收尚未执行；CI 只验证协议、归一化与假传输下的完整流程。
+
+### Step 7：每日图文产出（已实现，待真实 key 验收）
+
+- 新增 `npm run render:cards -- --date YYYY-MM-DD`：跑完 candidates → research → produce，把卡片文案计划渲染为 1080×1440（3:4）小红书竖图，输出卡片 PNG、`copy.txt`、`package.json` 与 `preview.html` 到 `runtime/publish/<日期>/`。
+- 渲染层（`lib/editorial-workbench/visual/cards.ts`）是纯 HTML/CSS 模板 + Playwright 截图：只做展示，不改写任何编辑内容，`visualDirection` 等内部字段绝不进入成品图；卡名按 `role` 确定性命名。
+- 边界保持不变：产物始终是 `draft`，脚本不批准、不自动发布到小红书；发布仍由人工完成。
+- mock 模式即可验证版式与流程；真实内容仍依赖 Step 6 的 live provider 配置与真实 key 验收。
+- 新增 copy 模式 `render:cards --from <content.json>`：内容由外部作者（人工或 WorkBuddy 自动化）按 `examples/daily-copy.example.json` 契约提供并核验事实后渲染出图，role 额外支持 `quote`（金句卡）；无需 provider key。
+- 视觉语言对齐「她文日历 HerLit」账号：米白纸底、深绿宋体、砖红点缀、可选摄影背景（data URL 内嵌）；在世作家不显示生卒行。## 暂不开发
 
 - 用户注册、登录、多租户
 - 会员、支付

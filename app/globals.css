@@ -11,6 +11,8 @@ button { cursor:pointer; }
 .brand-lockup { display:flex; gap:12px; align-items:center; }
 .brand-lockup>span { width:42px; height:42px; border:1px solid var(--forest); border-radius:50%; display:grid; place-items:center; color:var(--forest); font:italic 24px Georgia,serif; }
 .brand-lockup strong,.brand-lockup small { display:block; }.brand-lockup strong { font:23px Georgia,serif; }.brand-lockup small { margin-top:3px; font-size:9px; letter-spacing:.19em; color:var(--muted); }
+.provider-status { display:flex; align-items:center; gap:14px; }
+.provider-hint { max-width:42ch; font-size:10px; letter-spacing:.08em; color:var(--muted); text-align:right; }
 .mode-ribbon { padding:8px 12px; font-size:10px; font-weight:800; letter-spacing:.16em; border:1px solid; }.mode-ribbon.mock { color:var(--rust); background:#f7e2d9; }.mode-ribbon.live { color:var(--forest); background:#dae8df; }
 .opening { width:min(1240px,calc(100% - 48px)); margin:auto; padding:70px 0 50px; }.folio,.stage-heading span,.growth-heading span,.approval-section>div>span { color:var(--rust); font-size:10px; font-weight:800; letter-spacing:.19em; }.opening h1 { margin:12px 0 14px; color:var(--forest); font:500 clamp(46px,7vw,82px)/1.05 Georgia,"Songti SC",serif; }.opening>p:last-child { color:var(--muted); font:16px/1.7 Georgia,"Songti SC",serif; }
 .paper-section,.editorial-stage { width:min(1240px,calc(100% - 48px)); margin:0 auto 62px; background:rgba(255,250,241,.88); border:1px solid var(--line); box-shadow:0 24px 60px rgba(28,48,40,.07); }
