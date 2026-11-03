@@ -72,6 +72,14 @@ npm run typecheck:editorial
 npm run smoke:live -- --date 2026-11-02
 ```
 
+每天产出待审核的图文（跑完整链路，并把 3–6 张卡片渲染成 1080×1440 的小红书竖图，附带文案与核验摘要）：
+
+```bash
+npm run render:cards -- --date 2026-11-03
+```
+
+产物在 `runtime/publish/<日期>/`：卡片 PNG（`01-cover.png` 起，可预览的 `preview.html`）、`copy.txt`（标题候选、正文、话题标签、评论区引导）与 `package.json`（完整 draft 审核包）。图片不含水印，内容状态始终是 `draft`——人工审核通过后再自行发布到小红书；脚本不批准、不发布。卡片模板见 `lib/editorial-workbench/visual/cards.ts`。
+
 ## Provider 配置
 
 默认 `EDITORIAL_PROVIDER_MODE=mock`，页面会明确显示 `MOCK DATA`。Live mode 需要两类外部服务：一个模型服务（OpenAI 兼容 chat 或 Anthropic Messages）与一个搜索服务（Brave / Tavily / Serper，或自建 normalized search），以及可访问公网来源的 outbound HTTPS。密钥只放在本地环境变量，不在仓库保存 secret，也不把供应商 response shape 写入领域类型。

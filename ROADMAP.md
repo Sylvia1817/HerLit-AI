@@ -104,6 +104,12 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - 仍为进程内 session，没有 content history database；`recentRepeatPenalty` 在 live 模式下仍无真实历史可用。
 - 真实 key、真实来源与文学准确性验收尚未执行；CI 只验证协议、归一化与假传输下的完整流程。
 
+### Step 7：每日图文产出（已实现，待真实 key 验收）
+
+- 新增 `npm run render:cards -- --date YYYY-MM-DD`：跑完 candidates → research → produce，把卡片文案计划渲染为 1080×1440（3:4）小红书竖图，输出卡片 PNG、`copy.txt`、`package.json` 与 `preview.html` 到 `runtime/publish/<日期>/`。
+- 渲染层（`lib/editorial-workbench/visual/cards.ts`）是纯 HTML/CSS 模板 + Playwright 截图：只做展示，不改写任何编辑内容，`visualDirection` 等内部字段绝不进入成品图；卡名按 `role` 确定性命名。
+- 边界保持不变：产物始终是 `draft`，脚本不批准、不自动发布到小红书；发布仍由人工完成。
+- mock 模式即可验证版式与流程；真实内容仍依赖 Step 6 的 live provider 配置与真实 key 验收。
 ## 暂不开发
 
 - 用户注册、登录、多租户

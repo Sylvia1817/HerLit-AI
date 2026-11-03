@@ -14,7 +14,8 @@
     "typecheck:editorial": "node node_modules/typescript/bin/tsc -p tsconfig.editorial.json",
     "db:generate": "drizzle-kit generate",
     "test:browser": "node --test tests/browser-flow.test.mjs",
-    "smoke:live": "node --experimental-strip-types --env-file-if-exists=.env scripts/live-smoke.ts"
+    "smoke:live": "node --experimental-strip-types --env-file-if-exists=.env scripts/live-smoke.ts",
+    "render:cards": "node --experimental-strip-types --env-file-if-exists=.env scripts/render-cards.ts"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
