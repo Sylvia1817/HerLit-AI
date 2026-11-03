@@ -110,7 +110,8 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - 渲染层（`lib/editorial-workbench/visual/cards.ts`）是纯 HTML/CSS 模板 + Playwright 截图：只做展示，不改写任何编辑内容，`visualDirection` 等内部字段绝不进入成品图；卡名按 `role` 确定性命名。
 - 边界保持不变：产物始终是 `draft`，脚本不批准、不自动发布到小红书；发布仍由人工完成。
 - mock 模式即可验证版式与流程；真实内容仍依赖 Step 6 的 live provider 配置与真实 key 验收。
-## 暂不开发
+- 新增 copy 模式 `render:cards --from <content.json>`：内容由外部作者（人工或 WorkBuddy 自动化）按 `examples/daily-copy.example.json` 契约提供并核验事实后渲染出图，role 额外支持 `quote`（金句卡）；无需 provider key。
+- 视觉语言对齐「她文日历 HerLit」账号：米白纸底、深绿宋体、砖红点缀、可选摄影背景（data URL 内嵌）；在世作家不显示生卒行。## 暂不开发
 
 - 用户注册、登录、多租户
 - 会员、支付

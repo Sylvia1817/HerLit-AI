@@ -79,6 +79,13 @@ npm run render:cards -- --date 2026-11-03
 ```
 
 产物在 `runtime/publish/<日期>/`：卡片 PNG（`01-cover.png` 起，可预览的 `preview.html`）、`copy.txt`（标题候选、正文、话题标签、评论区引导）与 `package.json`（完整 draft 审核包）。图片不含水印，内容状态始终是 `draft`——人工审核通过后再自行发布到小红书；脚本不批准、不发布。卡片模板见 `lib/editorial-workbench/visual/cards.ts`。
+没有配置 provider key 时，也可以用 **copy 模式**：内容作者（人工或 WorkBuddy 自动化）按 `examples/daily-copy.example.json` 的契约写好 `content.json`（事实必须先经检索核验），然后：
+
+```bash
+npm run render:cards -- --from runtime/publish/<日期>/content.json --background <可选封面背景图>
+```
+
+`cards[].role` 支持七种管线角色外加 `quote`（金句卡）。校验失败会给出可操作的中文错误；成品与管线模式同样只到 draft。
 
 ## Provider 配置
 

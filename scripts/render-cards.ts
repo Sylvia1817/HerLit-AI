@@ -1,22 +1,33 @@
 /**
  * Daily content workflow: date → candidates → research → draft/cards → images.
  *
- * Produces everything a human needs in order to review and post by hand:
+ * Two entry modes:
  *
- *   runtime/publish/<date>/01-cover.png …    3:4 cards, 1080x1440
- *   runtime/publish/<date>/copy.txt          titles, body, hashtags
- *   runtime/publish/<date>/package.json      full review package (status: draft)
- *   runtime/publish/<date>/preview.html      all cards on one page
+ * 1. Pipeline mode (default) — runs the editorial pipeline through configured
+ *    providers, mirroring `smoke:live`:
  *
- * It never approves a package and never publishes anywhere. Approval still
- * happens in the workbench (or `npm run smoke:live` for inspection), which is
- * what keeps the human gate intact.
+ *      npm run render:cards -- --date 2026-11-03
  *
- *   npm run render:cards -- --date 2026-11-03
- *   npm run render:cards -- --date 2026-11-03 --style "温柔克制"
+ * 2. Copy mode (`--from`) — renders an externally authored content JSON
+ *    (for example written and fact-checked by the WorkBuddy automation):
+ *
+ *      npm run render:cards -- --from runtime/publish/2026-11-03/content.json
+ *
+ *    The JSON shape is documented in examples/daily-copy.example.json and
+ *    validated by validateCopyPayload(); `cards[].role` accepts the seven
+ *    pipeline roles plus "quote".
+ *
+ * Both modes write to runtime/publish/<date>/:
+ *   01-cover.png …        3:4 cards, exactly 1080x1440
+ *   copy.txt              titles, body, hashtags, comment hook
+ *   package.json          what was rendered and where it came from
+ *   preview.html          all cards on one page
+ *
+ * Neither mode approves a package or publishes anywhere. Approval and posting
+ * to Xiaohongshu stay manual.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { getEditorialDate } from "../lib/editorial-workbench/date.ts";
@@ -27,7 +38,11 @@ import {
   CARD_WIDTH,
   buildCardHtml,
   cardFileName,
+  validateCopyPayload,
   type CardFile,
+  type CardRenderMeta,
+  type CopyPayload,
+  type LooseCard,
 } from "../lib/editorial-workbench/visual/cards.ts";
 import type { CardPlan } from "../types/editorial.ts";
 
@@ -41,47 +56,39 @@ function line(label: string, value: string | number): void {
 }
 
 function writerDates(birthDate?: string, deathDate?: string): string | undefined {
+  // Only deceased writers get a life-span line; a bare "1967—" reads cold.
   const birth = birthDate?.slice(0, 4);
   const death = deathDate?.slice(0, 4);
   if (birth && death) return `${birth}—${death}`;
-  if (birth) return `${birth}—`;
   return undefined;
 }
 
-function copySheet(input: {
-  date: string;
-  titles: readonly { text: string; style?: string }[];
-  body: string;
-  hashtags: readonly string[];
-  cards: readonly CardPlan[];
-  readerHook: string;
-  verification: { readyForDraft: boolean; verified: number; needsReview: number };
-}): string {
-  const titleLines = input.titles.map((title, index) => `${index + 1}. ${title.text}`).join("\n");
-  const cardLines = input.cards
+function copySheet(input: { payload: CopyPayload; origin: string }): string {
+  const { payload } = input;
+  const titleLines = payload.titles.map((title, index) => `${index + 1}. ${title.text}`).join("\n");
+  const cardLines = payload.cards
     .map((card, index) => `\n[${String(index + 1).padStart(2, "0")}] ${card.role}\n${card.title}\n${card.copy}`)
     .join("\n");
-  return `HerLit 每日图文 · ${input.date}
+  return `HerLit 每日图文 · ${payload.date}
+来源：${input.origin}
 状态：DRAFT（未审核，未发布）
 
 —— 标题候选 ——
 ${titleLines}
 
 —— 正文 ——
-${input.body}
+${payload.body}
 
 —— 话题标签 ——
-${input.hashtags.join(" ")}
+${payload.hashtags.join(" ")}
 
 —— 评论区引导 ——
-${input.readerHook}
+${payload.readerHook}
 
 —— 卡片文案（供核对图片）——
 ${cardLines}
 
-—— 核验摘要 ——
-readyForDraft: ${input.verification.readyForDraft ? "是" : "否"} · verified claims: ${input.verification.verified} · needs review: ${input.verification.needsReview}
-提示：图片不含水印，可直接上传；发布前请在作品台确认「人工审核通过」。
+提示：图片不含水印，可直接上传；发布前请人工确认事实与措辞。
 `;
 }
 
@@ -120,9 +127,90 @@ ${figures}
 </html>`;
 }
 
-async function main(): Promise<void> {
-  const date = argument("date") ?? getEditorialDate();
-  const outDir = resolve(argument("out") ?? `runtime/publish/${date}`);
+async function renderAndWrite(input: {
+  payload: CopyPayload;
+  outDir: string;
+  origin: string;
+  backgroundPath?: string;
+}): Promise<void> {
+  const { payload, outDir, origin } = input;
+  // Embed the backdrop as a data URL: pages loaded via setContent have an
+  // about:blank origin, and Chromium refuses file:// subresources there.
+  let backgroundUrl: string | undefined;
+  if (input.backgroundPath) {
+    const image = await readFile(resolve(input.backgroundPath));
+    const extension = /\.jpe?g$/i.test(input.backgroundPath) ? "image/jpeg" : "image/png";
+    backgroundUrl = `data:${extension};base64,${image.toString("base64")}`;
+  }
+  await mkdir(outDir, { recursive: true });
+
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  // deviceScaleFactor 1 keeps the output at exactly 1080x1440 (the size
+  // Xiaohongshu recommends). Headless shell on Windows fails to capture
+  // screenshots at dsf 2, so 1 is also the portable choice.
+  const page = await browser.newPage({ viewport: { width: CARD_WIDTH, height: CARD_HEIGHT }, deviceScaleFactor: 1 });
+  const files: CardFile[] = [];
+  try {
+    for (const [offset, card] of payload.cards.entries()) {
+      const index = offset + 1;
+      const meta: CardRenderMeta = {
+        index,
+        total: payload.cards.length,
+        date: payload.date,
+        writerName: payload.writer.name,
+        writerOriginalName: payload.writer.originalName,
+        writerDates: writerDates(payload.writer.birthDate, payload.writer.deathDate),
+        backgroundUrl,
+      };
+      await page.setContent(buildCardHtml(card as LooseCard, meta), { waitUntil: "load" });
+      await page.evaluate(() => document.fonts.ready);
+      const file = cardFileName(card, index);
+      await page.screenshot({ path: resolve(outDir, file), type: "png" });
+      files.push({ index, role: card.role, file, title: card.title });
+      line(`card ${index}`, `${file} · ${card.title}`);
+    }
+  } finally {
+    await browser.close();
+  }
+
+  await writeFile(resolve(outDir, "copy.txt"), copySheet({ payload, origin }), "utf8");
+  await writeFile(
+    resolve(outDir, "package.json"),
+    JSON.stringify({ origin, date: payload.date, status: "draft", payload }, null, 2),
+    "utf8",
+  );
+  const writerName = payload.writer.name;
+  await writeFile(
+    resolve(outDir, "preview.html"),
+    previewHtml({ date: payload.date, files, title: `${writerName} · ${payload.titles[0]?.text ?? ""}` }),
+    "utf8",
+  );
+
+  console.log(`\n输出目录：${outDir}`);
+  console.log(`${files.length} 张图片 · 1080×1440`);
+  console.log("提醒：这是 draft，图片未加水印。请人工审核后再发布；本脚本不会发布到小红书。");
+}
+
+async function renderFromCopy(): Promise<boolean> {
+  const from = argument("from");
+  if (!from) return false;
+  const raw = await readFile(resolve(from), "utf8");
+  const payload = validateCopyPayload(JSON.parse(raw));
+  const outDir = resolve(argument("out") ?? `runtime/publish/${payload.date}`);
+  console.log(`\nHerLit 每日图文（copy 模式）· ${payload.date}`);
+  line("writer", payload.writer.name);
+  line("cards", payload.cards.length);
+  await renderAndWrite({
+    payload,
+    outDir,
+    origin: `copy-authored · ${resolve(from)}`,
+    backgroundPath: argument("background"),
+  });
+  return true;
+}
+
+async function runPipeline(date: string, outDir: string): Promise<void> {
   const diagnostics = describeEditorialRuntime();
 
   console.log(`\nHerLit 每日图文 · ${date}`);
@@ -184,64 +272,31 @@ async function main(): Promise<void> {
   line("review", pkg.review.recommendation);
 
   console.log("\n[4] 渲染图片");
-  await mkdir(outDir, { recursive: true });
-  const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ headless: true });
-  // deviceScaleFactor 1 keeps the output at exactly 1080x1440 (the size
-  // Xiaohongshu recommends). Headless shell on Windows fails to capture
-  // screenshots at dsf 2, so 1 is also the portable choice.
-  const page = await browser.newPage({ viewport: { width: CARD_WIDTH, height: CARD_HEIGHT }, deviceScaleFactor: 1 });
-  const files: CardFile[] = [];
-  try {
-    for (const [offset, card] of cards.entries()) {
-      const index = offset + 1;
-      const meta = {
-        index,
-        total: cards.length,
-        date,
-        writerName: writer.name,
-        writerOriginalName: writer.originalName,
-        writerDates: writerDates(writer.birthDate, writer.deathDate),
-      };
-      await page.setContent(buildCardHtml(card, meta), { waitUntil: "load" });
-      await page.evaluate(() => document.fonts.ready);
-      const file = cardFileName(card, index);
-      await page.screenshot({ path: resolve(outDir, file), type: "png" });
-      files.push({ index, role: card.role, file, title: card.title });
-      line(`card ${index}`, `${file} · ${card.title}`);
-    }
-  } finally {
-    await browser.close();
-  }
-
-  const sheet = copySheet({
-    date,
-    titles: pkg.draft.titles,
-    body: pkg.draft.body,
-    hashtags: pkg.draft.hashtags,
-    cards,
-    readerHook: pkg.draft.readerHook,
-    verification: {
-      readyForDraft: pack.readyForDraft,
-      verified: verified.length,
-      needsReview: pack.verification.needsReviewClaimIds.length,
+  await renderAndWrite({
+    origin: `pipeline · ${diagnostics.mode}`,
+    outDir,
+    payload: {
+      date,
+      writer: {
+        name: writer.name,
+        originalName: writer.originalName,
+        birthDate: writer.birthDate,
+        deathDate: writer.deathDate,
+      },
+      titles: pkg.draft.titles as CopyPayload["titles"],
+      body: pkg.draft.body,
+      hashtags: pkg.draft.hashtags,
+      readerHook: pkg.draft.readerHook,
+      cards: cards.map((entry) => entry as LooseCard),
     },
   });
-  await writeFile(resolve(outDir, "copy.txt"), sheet, "utf8");
-  await writeFile(
-    resolve(outDir, "package.json"),
-    JSON.stringify({ date, status: "draft", review: pkg.review, draft: pkg.draft, verifiedContext: pkg.verifiedContext, sources: pack.sources }, null, 2),
-    "utf8",
-  );
-  await writeFile(
-    resolve(outDir, "preview.html"),
-    previewHtml({ date, files, title: `${writer.name} · ${pkg.draft.titles[0]?.text ?? ""}` }),
-    "utf8",
-  );
+  console.log(`耗时 ${((Date.now() - started) / 1000).toFixed(1)}s`);
+}
 
-  console.log(`\n输出目录：${outDir}`);
-  console.log(`耗时 ${((Date.now() - started) / 1000).toFixed(1)}s · ${files.length} 张图片`);
-  console.log("提醒：这是 draft，图片未加水印。请人工审核后再发布；本脚本不会发布到小红书。");
+async function main(): Promise<void> {
+  if (await renderFromCopy()) return;
+  const date = argument("date") ?? getEditorialDate();
+  await runPipeline(date, resolve(argument("out") ?? `runtime/publish/${date}`));
 }
 
 main().catch((error: unknown) => {
