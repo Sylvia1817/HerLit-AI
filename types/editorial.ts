@@ -141,6 +141,14 @@ export type EditorialSelectionResult = {
   selectedCandidate: Candidate;
 };
 
+/** Application-level editor choice that preserves the original deterministic ranking. */
+export type EditorialSelectionOverride = {
+  originalSelectedCandidateId: string;
+  selectedCandidateId: string;
+  reason: string;
+  overriddenAt: string;
+};
+
 export type ResearchClaimCategory =
   | "bio"
   | "date_event"
@@ -447,6 +455,7 @@ export type WriterInput = {
 export type DailyEditorialPackage = {
   date: string;
   selection: EditorialSelectionResult;
+  editorOverride?: EditorialSelectionOverride;
   /** Full audit trail; never passed to Writer providers. */
   researchAudit: ResearchPack;
   verifiedContext: VerifiedEditorialContext;

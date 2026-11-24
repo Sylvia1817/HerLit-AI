@@ -38,6 +38,10 @@ import type {
 } from "./live-adapters.ts";
 import type { FetchedSource } from "./safe-fetch.ts";
 import { OrchestrationError } from "./errors.ts";
+import {
+  assertBasicLiveTaskPayload,
+  assertExtractionReferences,
+} from "./live-contracts.ts";
 
 const SOURCE_TYPES = new Set<ResearchSourceType>([
   "official", "institution", "library", "publisher", "reputable_media", "secondary",
@@ -71,6 +75,7 @@ export class LiveEditorialCandidateProvider implements EditorialCandidateProvide
         rules: "Return discovery leads only. Do not calculate score, penalty, total, rank, or verified status.",
       },
     );
+    assertBasicLiveTaskPayload("editorial_candidate_discovery", payload);
     if (!Array.isArray(payload.candidates)) throw new Error("Live candidate adapter returned invalid candidates");
     const proposals = payload.candidates.map((candidate) => {
       if (Object.hasOwn(candidate, "score") || Object.hasOwn(candidate, "rank")) {
@@ -126,6 +131,7 @@ export class LiveResearchEvidenceProvider implements ResearchEvidenceProvider {
       "editorial_research_queries",
       { writer: candidate.writer, whyHerToday: candidate.proposedWhyHerToday },
     );
+    assertBasicLiveTaskPayload("editorial_research_queries", queryPayload);
     const queries = Array.isArray(queryPayload.queries) ? queryPayload.queries.slice(0, 4) : [];
     if (queries.length === 0) throw new Error("Live research produced no search queries");
     const searchAttempts = await Promise.allSettled(queries.map((query) => this.search.search(query)));
@@ -182,6 +188,11 @@ export class LiveResearchEvidenceProvider implements ResearchEvidenceProvider {
         rules: "Extract only claims supported by supplied source IDs. Do not set verified, confidence, or readyForDraft.",
       },
     );
+    assertExtractionReferences(
+      extraction,
+      new Set(fetched.map(({ id }) => id)),
+      new Set(candidate.proposedWhyHerToday.evidenceLeads.map(({ id }) => id)),
+    );
     const metadata = new Map(extraction.sourceMetadata?.map((item) => [item.sourceId, item]) ?? []);
     const sources: ResearchSource[] = fetched.map(({ id, result, page }) => {
       const item = metadata.get(id);
@@ -213,6 +224,7 @@ export class LiveReaderValueProvider implements ReaderValueProvider {
   constructor(model: JsonModelAdapter) { this.model = model; this.id = `live-value:${model.id}`; }
   async propose(context: VerifiedEditorialContext): Promise<readonly ValueModuleProposal[]> {
     const result = await this.model.generateJson<LiveValuePayload>("reader_value_modules", context);
+    assertBasicLiveTaskPayload("reader_value_modules", result);
     return structuredClone(result.modules ?? []);
   }
 }
@@ -223,7 +235,9 @@ export class LiveEditorialWriterProvider implements EditorialWriterProvider {
   private readonly model: JsonModelAdapter;
   constructor(model: JsonModelAdapter) { this.model = model; this.id = `live-writer:${model.id}`; }
   async draft(input: WriterInput): Promise<WriterProposal> {
-    return structuredClone(await this.model.generateJson<LiveWriterPayload>("grounded_editorial_draft", input));
+    const result = await this.model.generateJson<LiveWriterPayload>("grounded_editorial_draft", input);
+    assertBasicLiveTaskPayload("grounded_editorial_draft", result);
+    return structuredClone(result);
   }
 }
 
@@ -233,6 +247,8 @@ export class LiveEditorialReviewProvider implements EditorialReviewProvider {
   private readonly model: JsonModelAdapter;
   constructor(model: JsonModelAdapter) { this.model = model; this.id = `live-review:${model.id}`; }
   async review(input: EditorialReviewInput): Promise<EditorialReviewProposal> {
-    return structuredClone(await this.model.generateJson<LiveReviewPayload>("editorial_growth_review", input));
+    const result = await this.model.generateJson<LiveReviewPayload>("editorial_growth_review", input);
+    assertBasicLiveTaskPayload("editorial_growth_review", result);
+    return structuredClone(result);
   }
 }

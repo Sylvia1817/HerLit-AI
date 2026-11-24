@@ -29,7 +29,7 @@
   → Verified Why Her Today
   → Reader Value Modules（2–3 个）
   → 小红书审核稿 + Growth Notes + 卡片方案（3–6 张）
-  → 人工审核
+  → 人工审核与 Markdown / JSON 导出
 ```
 
 Selection、Research 与写作严格分离：Selection 只能提出待核验 Evidence Leads，不能生成 Research Claim ID；Research 创建并核验正式 claims；正文生成阶段只能使用已核验的 Why Her Today 与 Research Claims。找不到权威出处的引语必须省略；柔性日期关联必须明确标记为 editorial link。
@@ -68,11 +68,15 @@ npm run typecheck:editorial
 
 ## Provider 配置
 
-默认 `EDITORIAL_PROVIDER_MODE=mock`，页面会明确显示 `MOCK DATA`。Live mode 通过 `.env.example` 中的 generic JSON model/search adapter 变量配置，不在仓库保存 secret，也不把供应商 response shape 写入领域类型。
+默认 `EDITORIAL_PROVIDER_MODE=mock`，页面会明确显示 `MOCK DATA`。Step 6 的 Live mode 使用 OpenAI Responses API 与 Tavily Search API，通过 `.env.example` 注入环境变量；仓库不保存 secret，也不把供应商 response shape 写入领域类型。当前状态为 `implemented, live smoke pending`。
 
 Live Research 的顺序是 Search → 安全 Source Fetch → Claim Extraction → 现有 Verification Policy。模型记忆不能成为 ResearchSource；所有 source 必须来自实际抓取、可追溯的 URL。
 
-当前 session 使用带 TTL 与容量上限的进程内短期存储，刷新、过期或 server restart 后可重新运行流程；正式 content history database 不在 Step 5 范围内。Human approval 由 server 绑定 package ID 与当前 review fingerprint，发布版导出会重新校验 package invariants、review freshness 与 approval binding。
+当前 session 使用带 TTL 与容量上限的进程内短期存储。浏览器仅保存 opaque session IDs，刷新后由 server 恢复权威状态；过期或 server restart 后需重新运行流程。正式 content history database 不在 Step 6 范围内。Human approval 由 server 绑定 package ID 与当前 review fingerprint，发布版导出会重新校验 package invariants、review freshness 与 approval binding。
+
+编辑可以从 shortlist 中选择非 rank 1 人物继续 Research；系统保留原始程序排名与 SelectionDecision，并单独记录 override 的人物、理由和时间。客户端选择本身不成为领域或 approval 权威。
+
+真实 smoke test 必须显式运行 `npm run test:live-smoke`，默认跳过。首次日期为 `2026-08-18`，声明费用上限不得超过 USD 1；没有真实 credentials 时不得把 fixture/mock tests 描述成 live 成功。
 
 编辑日期固定按 `Asia/Shanghai` 计算并验证真实日历日期。Live Source Fetch 将 DNS 验证结果绑定到实际连接 IP，每次 redirect 都重新解析、验证并绑定；单个来源失败只产生结构化 skip diagnostic，不会丢弃同批安全来源。
 
@@ -87,9 +91,3 @@ Live Research 的顺序是 Search → 安全 Source Fetch → Claim Extraction �
 5. `daily/`：真实内容与视觉交付样例。
 
 请保留“先审核、后制作图片、绝不自动发布”的人工把关机制。安装、构建成功或模型返回不等于内容验收成功；最终仍需编辑检查选题逻辑、来源、事实、表达与品牌价值。
-
-## CI 与合并验收
-
-CI 检查领域类型、lint、生产构建与回归测试，另运行真实浏览器的 mock 编辑审核流程及 Git 历史 secret 扫描。新增 TypeScript 测试通过 `tests/*.test.ts` 自动发现。
-
-管理员需要将 `Typecheck, lint and tests`、`Browser approval flow`、`Secret scan` 设置为 `main` 的必需检查；workflow 本身不会开启分支保护。配置步骤、失败门禁验收与尚未覆盖的内容语义边界见 [CI gates](docs/ci-gates.md)。

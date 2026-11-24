@@ -13,12 +13,11 @@
     "lib/editorial-workbench/**/*.ts",
     "app/api/editorial/**/*.ts",
     "app/page.tsx",
-    "tests/*.test.ts"
+    "tests/editorial-selection.test.ts",
+    "tests/research-verification.test.ts",
+    "tests/editorial-production.test.ts",
+    "tests/editorial-workbench.test.ts",
+    "tests/editorial-live-smoke.test.ts"
   ],
-  "exclude": [
-    "node_modules",
-    "runtime",
-    "dist",
-    ".next"
-  ]
+  "exclude": ["node_modules", "runtime", "dist", ".next"]
 }

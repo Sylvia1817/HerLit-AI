@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   DailyEditorialPackage,
   EditorialRequest,
+  EditorialSelectionOverride,
   EditorialSelectionResult,
   ResearchPack,
 } from "../../types/editorial.ts";
@@ -24,6 +25,7 @@ export type StoredResearch = {
   selectionId: string;
   pack: ResearchPack;
   providerMode: EditorialProviderMode;
+  editorOverride?: EditorialSelectionOverride;
 };
 
 export type StoredPackage = {

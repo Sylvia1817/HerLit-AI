@@ -8,6 +8,11 @@ import type {
 } from "../../types/editorial.ts";
 import { OrchestrationError } from "./errors.ts";
 import type { EditorialStage } from "./types.ts";
+import {
+  assertBasicLiveTaskPayload,
+  isRecord,
+  parseSearchResults,
+} from "./live-contracts.ts";
 
 export interface JsonModelAdapter {
   readonly id: string;
@@ -135,6 +140,120 @@ export class HttpJsonSearchAdapter implements EditorialSearchAdapter {
       }, 503);
     }
     return payload.results;
+  }
+}
+
+function openAIOutputText(payload: unknown): string | undefined {
+  if (!isRecord(payload)) return undefined;
+  if (typeof payload.output_text === "string") return payload.output_text;
+  if (!Array.isArray(payload.output)) return undefined;
+  for (const item of payload.output) {
+    if (!isRecord(item) || !Array.isArray(item.content)) continue;
+    for (const content of item.content) {
+      if (isRecord(content) && content.type === "output_text" && typeof content.text === "string") {
+        return content.text;
+      }
+    }
+  }
+  return undefined;
+}
+
+export class OpenAIResponsesModelAdapter implements JsonModelAdapter {
+  readonly id = "openai-responses";
+  private readonly baseUrl: string;
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly maxOutputTokens: number;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(config: {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+    maxOutputTokens?: number;
+    fetchImpl?: typeof fetch;
+  }) {
+    this.baseUrl = config.baseUrl;
+    this.apiKey = config.apiKey;
+    this.model = config.model;
+    this.maxOutputTokens = config.maxOutputTokens ?? 6_000;
+    this.fetchImpl = config.fetchImpl ?? fetch;
+  }
+
+  async generateJson<T>(task: string, input: unknown): Promise<T> {
+    const stage = stageForTask(task);
+    const response = await providerFetch(this.fetchImpl, this.baseUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        instructions: "You are a bounded HerLit editorial pipeline provider. Return one JSON object only. Never invent program-owned verification, score, rank, approval, or source-fetch results.",
+        input: JSON.stringify({ task, input }),
+        text: { format: { type: "json_object" } },
+        max_output_tokens: this.maxOutputTokens,
+      }),
+      signal: AbortSignal.timeout(45_000),
+    }, "OpenAI Responses API", stage);
+    const payload = await responseJson(response, "OpenAI Responses API", stage);
+    const text = openAIOutputText(payload);
+    if (!text) {
+      throw new OrchestrationError({
+        stage,
+        code: "LIVE_PROVIDER_INVALID_RESPONSE",
+        message: "OpenAI Responses API returned no output_text",
+        retryable: false,
+      }, 502);
+    }
+    let value: unknown;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      throw new OrchestrationError({
+        stage,
+        code: "LIVE_PROVIDER_INVALID_RESPONSE",
+        message: "OpenAI Responses API output_text was not valid JSON",
+        retryable: false,
+      }, 502);
+    }
+    assertBasicLiveTaskPayload(task, value);
+    return value as T;
+  }
+}
+
+export class TavilySearchAdapter implements EditorialSearchAdapter {
+  readonly id = "tavily-search";
+  private readonly baseUrl: string;
+  private readonly apiKey: string;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(config: { baseUrl: string; apiKey: string; fetchImpl?: typeof fetch }) {
+    this.baseUrl = config.baseUrl;
+    this.apiKey = config.apiKey;
+    this.fetchImpl = config.fetchImpl ?? fetch;
+  }
+
+  async search(query: string): Promise<readonly SearchResult[]> {
+    const response = await providerFetch(this.fetchImpl, this.baseUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        search_depth: "basic",
+        max_results: 6,
+        include_answer: false,
+        include_raw_content: false,
+        include_images: false,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    }, "Tavily Search API", "research");
+    const payload = await responseJson(response, "Tavily Search API", "research");
+    return parseSearchResults(payload, "Tavily Search API");
   }
 }
 

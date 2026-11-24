@@ -8,8 +8,8 @@ import type {
 } from "../editorial-production/contracts.ts";
 import type { EditorialRuntimeConfig } from "./config.ts";
 import {
-  HttpJsonModelAdapter,
-  HttpJsonSearchAdapter,
+  OpenAIResponsesModelAdapter,
+  TavilySearchAdapter,
 } from "./live-adapters.ts";
 import {
   LiveEditorialCandidateProvider,
@@ -60,8 +60,8 @@ export function createMockProviderFactory(): WorkbenchProviderFactory {
 
 export function createLiveProviderFactory(config: EditorialRuntimeConfig): WorkbenchProviderFactory {
   if (!config.model || !config.search) throw new Error("Live provider configuration is incomplete");
-  const model = new HttpJsonModelAdapter(config.model);
-  const search = new HttpJsonSearchAdapter(config.search);
+  const model = new OpenAIResponsesModelAdapter(config.model);
+  const search = new TavilySearchAdapter(config.search);
   return {
     mode: "live",
     createCandidateProvider: () => new LiveEditorialCandidateProvider(model),
