@@ -1,6 +1,7 @@
 import type {
   DailyEditorialPackage,
   EditorialRequest,
+  EditorialSelectionOverride,
   EditorialSelectionResult,
   GroundedDraft,
   ResearchPack,
@@ -43,6 +44,7 @@ export type ResearchApiMeta = {
   researchId: string;
   selectionId: string;
   providerMode: EditorialProviderMode;
+  editorOverride?: EditorialSelectionOverride;
 };
 
 export type ProductionApiMeta = {
@@ -68,6 +70,7 @@ export type ResearchRequest = {
   selectionId: string;
   selection: EditorialSelectionResult;
   candidateId: string;
+  overrideReason?: string;
 };
 export type ResearchResponse = ApiSuccess<ResearchPack, ResearchApiMeta>;
 
@@ -119,3 +122,22 @@ export type EditorialExportOptions = {
   preferredTitleIndex: number;
   publishReady: boolean;
 };
+
+export type SessionResumeRequest = {
+  selectionId: string;
+  researchId?: string;
+  packageId?: string;
+};
+
+export type SessionSnapshot = {
+  stage: "selection" | "research" | "production";
+  selection: EditorialSelectionResult;
+  selectionMeta: CandidateApiMeta;
+  research?: ResearchPack;
+  researchMeta?: ResearchApiMeta;
+  editorialPackage?: DailyEditorialPackage;
+  productionMeta?: ProductionApiMeta;
+  humanReview: HumanReviewState;
+};
+
+export type SessionResumeResponse = ApiSuccess<SessionSnapshot, { providerMode: EditorialProviderMode }>;

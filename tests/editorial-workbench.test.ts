@@ -6,7 +6,7 @@ import { POST as candidatesPost } from "../app/api/editorial/candidates/route.ts
 import { assertSelectionResult } from "../lib/editorial-selection/index.ts";
 import { ResearchVerificationEngine } from "../lib/research-verification/index.ts";
 import { assertDailyEditorialPackage, isEditorialReviewStale } from "../lib/editorial-production/index.ts";
-import { HttpJsonModelAdapter, HttpJsonSearchAdapter } from "../lib/editorial-workbench/live-adapters.ts";
+import { HttpJsonModelAdapter, HttpJsonSearchAdapter, OpenAIResponsesModelAdapter, TavilySearchAdapter } from "../lib/editorial-workbench/live-adapters.ts";
 import type { JsonModelAdapter, EditorialSearchAdapter } from "../lib/editorial-workbench/live-adapters.ts";
 import { loadEditorialRuntimeConfig } from "../lib/editorial-workbench/config.ts";
 import { getEditorialDate } from "../lib/editorial-workbench/date.ts";
@@ -263,7 +263,7 @@ test("S4: redirect to a private target is rejected before connecting", async () 
 test("I17: unavailable live configuration returns a structured stage error", () => {
   const before = { ...process.env };
   process.env.EDITORIAL_PROVIDER_MODE = "live";
-  delete process.env.EDITORIAL_MODEL_PROVIDER;
+  delete process.env.OPENAI_API_KEY;
   try {
     assert.throws(
       () => loadEditorialRuntimeConfig(),
@@ -272,6 +272,102 @@ test("I17: unavailable live configuration returns a structured stage error", () 
   } finally {
     process.env = before;
   }
+});
+
+test("Step 6: OpenAI Responses adapter uses server credentials and validates JSON output", async () => {
+  let requestUrl = "";
+  let requestInit: RequestInit | undefined;
+  const adapter = new OpenAIResponsesModelAdapter({
+    baseUrl: "https://api.openai.example/v1/responses",
+    apiKey: "secret-openai-key",
+    model: "test-model",
+    fetchImpl: async (url, init) => {
+      requestUrl = String(url);
+      requestInit = init;
+      return new Response(JSON.stringify({
+        output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify({ queries: ["writer archive"] }) }] }],
+      }), { headers: { "content-type": "application/json" } });
+    },
+  });
+  assert.deepEqual(await adapter.generateJson("editorial_research_queries", {}), { queries: ["writer archive"] });
+  assert.equal(requestUrl, "https://api.openai.example/v1/responses");
+  const body = JSON.parse(String(requestInit?.body));
+  assert.equal(body.model, "test-model");
+  assert.equal(body.text.format.type, "json_object");
+  assert.equal((requestInit?.headers as Record<string, string>).authorization, "Bearer secret-openai-key");
+  assert.doesNotMatch(JSON.stringify(body), /secret-openai-key/);
+});
+
+test("Step 6: Tavily adapter uses bounded basic search and normalizes results", async () => {
+  let requestInit: RequestInit | undefined;
+  const adapter = new TavilySearchAdapter({
+    baseUrl: "https://api.tavily.example/search",
+    apiKey: "secret-tavily-key",
+    fetchImpl: async (_url, init) => {
+      requestInit = init;
+      return new Response(JSON.stringify({ results: [{ url: "https://archive.example/writer", title: "Archive", content: "Evidence snippet" }] }), { headers: { "content-type": "application/json" } });
+    },
+  });
+  assert.deepEqual(await adapter.search("writer archive"), [{ url: "https://archive.example/writer", title: "Archive", snippet: "Evidence snippet" }]);
+  const body = JSON.parse(String(requestInit?.body));
+  assert.equal(body.search_depth, "basic");
+  assert.equal(body.max_results, 6);
+  assert.equal(body.include_answer, false);
+  assert.equal((requestInit?.headers as Record<string, string>).authorization, "Bearer secret-tavily-key");
+});
+
+test("Step 6: editor override preserves original ranking and binds production to the chosen writer", async () => {
+  const service = new EditorialWorkbenchService({ providers: createMockProviderFactory() });
+  const candidates = await service.candidates({ date: DATE });
+  const originalIds = candidates.data.candidateShortlist.map(({ id }) => id);
+  const alternative = candidates.data.candidateShortlist[1];
+  await assert.rejects(
+    () => service.research({ selectionId: candidates.meta.selectionId, candidateId: alternative.id }),
+    (error: unknown) => error instanceof OrchestrationError && error.code === "EDITOR_OVERRIDE_REASON_REQUIRED",
+  );
+  const research = await service.research({
+    selectionId: candidates.meta.selectionId,
+    candidateId: alternative.id,
+    overrideReason: "她更符合今天的人工编辑主题",
+  });
+  assert.equal(research.meta.editorOverride?.selectedCandidateId, alternative.id);
+  const production = await service.produce({ selectionId: candidates.meta.selectionId, researchId: research.meta.researchId });
+  assert.deepEqual(production.data.selection.candidateShortlist.map(({ id }) => id), originalIds);
+  assert.equal(production.data.selection.selectedCandidate.id, originalIds[0]);
+  assert.equal(production.data.editorOverride?.selectedCandidateId, alternative.id);
+  assert.equal(production.data.researchAudit.writer.id, alternative.writer.id);
+  assert.doesNotThrow(() => assertDailyEditorialPackage(production.data));
+});
+
+test("Step 6: opaque IDs resume the server-owned session within TTL", async () => {
+  const { service, candidates, research, production } = await completeFlow();
+  const resumed = await service.resume({
+    selectionId: candidates.meta.selectionId,
+    researchId: research.meta.researchId,
+    packageId: production.meta.packageId,
+  });
+  assert.equal(resumed.data.stage, "production");
+  assert.equal(resumed.data.productionMeta?.packageId, production.meta.packageId);
+  assert.equal(resumed.data.editorialPackage?.status, "draft");
+  assert.equal(resumed.data.humanReview.status, "ready_for_review");
+});
+
+test("Step 6: extraction cannot reference source or Evidence Lead IDs outside fetched input", async () => {
+  const model: JsonModelAdapter = {
+    id: "bad-extraction-model",
+    async generateJson<T>(task: string): Promise<T> {
+      if (task === "editorial_research_queries") return { queries: ["writer archive"] } as T;
+      return {
+        sourceMetadata: [{ sourceId: "invented-source", sourceType: "institution", title: "Invented" }],
+        claims: [{ id: "claim", claim: "Claim", category: "bio", evidence: [{ sourceId: "invented-source", support: "direct" }] }],
+        leadFindings: [{ evidenceLeadId: "invented-lead", researchClaimIds: ["claim"] }],
+      } as T;
+    },
+  };
+  const search: EditorialSearchAdapter = { id: "search", async search() { return [{ url: "https://archive.example/source", title: "Archive" }]; } };
+  const provider = new LiveResearchEvidenceProvider({ model, search, fetchSource: async (url) => ({ url, contentType: "text/html", text: "source" }) });
+  const candidate = (await new EditorialWorkbenchService({ providers: createMockProviderFactory() }).candidates({ date: DATE })).data.selectedCandidate;
+  await assert.rejects(() => provider.investigate(candidate), /unknown source ID/);
 });
 
 test("editorial date uses Asia/Shanghai across the UTC date boundary and rejects impossible dates", async () => {

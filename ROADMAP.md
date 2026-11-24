@@ -57,7 +57,7 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - `readyForDraft` 与程序 eligibility 双向一致，既拒绝错误放行，也拒绝满足条件后的错误阻塞。
 - Quote policy 不读取 provider 自报的 attribution 结论，而是比较 claim attribution 与权威 evidence 中的真实 author、character、narrator 等 speaker context。
 
-### Step 4：Reader Value、Grounded Writer 与 Growth Review（已实现，待 review）
+### Step 4：Reader Value、Grounded Writer 与 Growth Review（已完成）
 
 - 从 ready Research Pack 确定性构建只含 verified claims 的 `VerifiedEditorialContext`。
 - 独立 Reader Value Engine 生成并校验 2–3 个可收藏模块及其 claim provenance。
@@ -73,7 +73,7 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - Selection shortlist/selected candidate、Research、VerifiedContext 与 Draft 的 writer identity 必须一致。
 - Quote 除真实 speaker attribution 外，还必须由权威 evidence excerpt 核验 canonical wording；下游不能改写引语正文。
 
-### Step 5：Live Editorial Workbench（已实现，待 review）
+### Step 5：Live Editorial Workbench（已完成）
 
 - 以 Next/TypeScript server routes 直接编排既有 domain engines；FastAPI 只保留 health scaffold。
 - candidates、research、produce、review API 使用结构化 stage errors 和短期 server session，拒绝客户端伪造程序字段。
@@ -84,7 +84,7 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - Human approval 是 DailyEditorialPackage 外层状态；自动领域状态仍为 draft，批准后仅允许 Markdown/JSON 导出，不自动发布。
 - 当前 persistence 为进程内 editor session；未引入用户、权限、CMS 或 content history database。
 
-### Step 5.1：Workbench runtime 边界修复（已实现，待 review）
+### Step 5.1：Workbench runtime 边界修复（已完成）
 
 - Human approval 与 package ID、review revision/fingerprint 绑定；approve/export 均由 server session 执行，客户端不能铸造 approved。
 - Safe Source Fetch 使用经过验证的固定连接 IP，核对实际 remote address，并对每次 redirect 重新绑定，防止 DNS rebinding。
@@ -92,6 +92,17 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 - Live Research 对 Search/Fetch 使用受控 partial-success，并保留结构化 skipped-source diagnostics。
 - Live adapter 的 HTTP、timeout 与 invalid JSON errors 保留真实 selection/research/production/review stage。
 - 进程内 EditorialSessionStore 增加 TTL、确定性容量上限与明确 session-expired errors。
+
+### Step 6：Live Editorial Pilot & Operational Acceptance（implemented, live smoke pending）
+
+- Live model adapter 固定使用 OpenAI Responses API；Live search adapter 固定使用 Tavily Search API，供应商 response shape 不进入领域类型。
+- 所有 live payload 通过 runtime contract validation；provider 不能提交 score、rank、verified、readyForDraft 或 approval 等程序权威字段。
+- Tavily 只返回候选 URL；Research 仍按 Search → Safe Fetch → Claim Extraction → Verification Policy 执行，模型记忆不能成为 source。
+- 编辑可以选择 shortlist 中非 rank 1 人物继续 Research；原始排名与 SelectionDecision 永久保留，override 记录人物、理由与时间。
+- 浏览器只保存 opaque session IDs；刷新后可在 server TTL 内恢复，server restart 后明确失效，不引入数据库。
+- Research UI 展示被安全边界跳过的来源；人工编辑、re-review、approval 与 export invariants 保持不变。
+- Live smoke 为显式 opt-in，首次日期预设为 `2026-08-18`，声明费用上限为 USD 1；未配置真实 credentials 时不得声称 live E2E 成功。
+- 本步骤不部署、不保存真实密钥、不新增 `/publish`，所有自动领域结果仍为 draft。
 
 ## 暂不开发
 
@@ -105,7 +116,7 @@ HerLit 背后的 AI 内容编辑系统。MVP 可暂时由一位编辑操作，�
 
 ## 长期维护原则
 
-- 按 Step 1 → 5 依次推进，每一步保持独立可构建、可检查。
+- 按 Step 1 → 6 依次推进，每一步保持独立可构建、可检查。
 - 选题、Research、Verification、Writer 与 Review 分层，问题可以定位到具体阶段。
 - 重要事实必须有来源；引语找不到可靠出处时宁可省略。
 - 柔性关联必须坦诚标识为 editorial link，不能伪装成“历史上的今天”。

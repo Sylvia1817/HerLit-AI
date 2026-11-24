@@ -57,6 +57,10 @@ test("keeps the finished site free of disposable starter assets", async () => {
   await assert.rejects(access(new URL("public/_sites-preview", templateRoot)));
 });
 
+test("keeps automatic publishing outside the server route surface", async () => {
+  await assert.rejects(access(new URL("../app/api/editorial/publish", import.meta.url)));
+});
+
 test("built server runtime executes the complete mock API flow including review binding", async () => {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("api-test", `${process.pid}-${Date.now()}`);
@@ -93,6 +97,13 @@ test("built server runtime executes the complete mock API flow including review 
   assert.equal(production.data.status, "draft");
   assert.equal(production.data.review.reviewedInputBinding.algorithm, "sha256");
   assert.match(production.data.review.reviewedInputBinding.fingerprint, /^[a-f0-9]{64}$/);
+  const resumed = await post("/api/editorial/session", {
+    selectionId: candidates.meta.selectionId,
+    researchId: research.meta.researchId,
+    packageId: production.meta.packageId,
+  });
+  assert.equal(resumed.data.stage, "production");
+  assert.equal(resumed.data.productionMeta.packageId, production.meta.packageId);
   const approval = await post("/api/editorial/approve", { packageId: production.meta.packageId });
   assert.equal(approval.data.packageId, production.meta.packageId);
   const exported = await post("/api/editorial/export", {
