@@ -49,6 +49,7 @@ binding, approval, export) is local program logic and needs no external service.
 | --- | --- | --- | --- |
 | `generic_json` | `HttpJsonModelAdapter` | your HerLit task server (`{model, task, input}` → `{data}`) | `Authorization: Bearer` |
 | `openai_chat` | `OpenAIChatModelAdapter` | `{base}/chat/completions` (base URLs ending in `/v1` get this path appended; a full endpoint is used as-is) | `Authorization: Bearer` |
+| `openai_responses` | `OpenAIResponsesModelAdapter` | `{base}/responses` (e.g. `https://api.openai.com/v1/responses`) | `Authorization: Bearer` |
 | `anthropic_messages` | `AnthropicMessagesModelAdapter` | `{base}/v1/messages` | `x-api-key` + `anthropic-version` |
 | `brave` | `BraveSearchAdapter` | `https://api.search.brave.com/res/v1/web/search` | `X-Subscription-Token` |
 | `tavily` | `TavilySearchAdapter` | `https://api.tavily.com/search` | `Authorization: Bearer` |
@@ -145,7 +146,7 @@ HTML is reduced to readable text and decoded with the declared charset.
 
 ```bash
 # whole pipeline without a browser
-npm run smoke:live -- --date 2026-11-02
+npm run smoke:live -- --date 2026-11-02 --allow-paid
 
 # interactive workbench
 EDITORIAL_PROVIDER_MODE=live npm run dev
@@ -224,3 +225,14 @@ extraction, config validation, diagnostics redaction, and a full
 candidates → research → draft → review run through the real adapters with a fake
 transport. It does not call a paid provider. A real end-to-end run requires your
 own keys and is what `npm run smoke:live` is for.
+
+## First live preflight (OpenAI Responses + Tavily)
+
+Copy .env.example to the git-ignored .env locally. Set EDITORIAL_PROVIDER_MODE=live, EDITORIAL_MODEL_PROTOCOL=openai_responses, EDITORIAL_MODEL_PROVIDER=openai, EDITORIAL_MODEL_BASE_URL=https://api.openai.com/v1, EDITORIAL_MODEL_NAME to a model enabled in your API project, EDITORIAL_SEARCH_PROTOCOL=tavily and EDITORIAL_SEARCH_PROVIDER=tavily. Fill EDITORIAL_MODEL_API_KEY and EDITORIAL_SEARCH_API_KEY only in your local file or deployment secret store. Never paste actual keys into an issue, PR, chat, or .env.example. ChatGPT subscription and API billing are separate.
+
+- npm run smoke:live -- --check-config checks only parsed configuration, with no paid requests; success does not verify credentials or connectivity.
+- npm run smoke:live -- --date YYYY-MM-DD --allow-paid runs real content generation. It can incur charges. Use a dedicated provider project, usage alerts and provider-side quotas where available. Output token limits and retry limits are not a hard currency budget. Do not run with a private note or confidential input.
+- The Responses adapter sends store:false, requests JSON object format unless json mode is off, caps output tokens and refuses incomplete/refusal responses. It uses the existing task normalizer and fact-verification/approval pipeline. store:false is not a promise of zero retention.
+- No CI job uses real API keys or auto-publishes. Real content acceptance and independent source credibility checks remain required.
+
+Official Responses API reference: https://developers.openai.com/api/reference/resources/responses/methods/create

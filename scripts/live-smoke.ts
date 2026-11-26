@@ -5,7 +5,8 @@
  * date → candidates → research → reader value → grounded draft → review.
  * It never publishes anywhere and never approves a package.
  *
- *   npm run smoke:live -- --date 2026-11-02
+ *   npm run smoke:live -- --check-config
+ *   npm run smoke:live -- --date 2026-11-02 --allow-paid
  *
  * Requires EDITORIAL_PROVIDER_MODE=live plus the model/search settings from
  * .env.example. Results are written to `runtime/` (git-ignored) for inspection.
@@ -45,6 +46,21 @@ async function main(): Promise<void> {
     line("search", `${diagnostics.search?.protocol} @ ${diagnostics.search?.host}`);
   } else {
     console.log("  MOCK DATA：仅验证流程，不代表真实内容生产。");
+  }
+
+  if (process.argv.includes("--check-config")) {
+    if (diagnostics.mode !== "live" || !diagnostics.ready) {
+      console.error("Preflight requires complete live configuration; no provider was called.");
+      process.exitCode = 2;
+    } else {
+      console.log("Configuration parsed successfully. Credentials have NOT been validated; no provider was called.");
+    }
+    return;
+  }
+  if (diagnostics.mode === "live" && !process.argv.includes("--allow-paid")) {
+    console.error("Live smoke can incur provider charges. Add --allow-paid to explicitly authorize this run.");
+    process.exitCode = 2;
+    return;
   }
 
   const service = new EditorialWorkbenchService();

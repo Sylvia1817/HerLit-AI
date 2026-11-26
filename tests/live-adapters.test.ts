@@ -7,6 +7,8 @@ import { OrchestrationError } from "../lib/editorial-workbench/errors.ts";
 import {
   AnthropicMessagesModelAdapter,
   OpenAIChatModelAdapter,
+  OpenAIResponsesModelAdapter,
+  resolveResponsesEndpoint,
   resolveAnthropicEndpoint,
   resolveOpenAIEndpoint,
 } from "../lib/editorial-workbench/live/model-adapters.ts";
@@ -316,7 +318,7 @@ test("live configuration defaults to the generic protocol and rejects vendor URL
 test("unexpected protocol values fail loudly instead of silently falling back", async () => {
   await withEnv({
     EDITORIAL_PROVIDER_MODE: "live",
-    EDITORIAL_MODEL_PROTOCOL: "openai_responses",
+    EDITORIAL_MODEL_PROTOCOL: "unknown_protocol",
     EDITORIAL_MODEL_PROVIDER: "openai",
     EDITORIAL_MODEL_BASE_URL: "https://api.openai.com/v1",
     EDITORIAL_MODEL_API_KEY: "model-key",
@@ -351,4 +353,66 @@ test("runtime diagnostics list missing settings without exposing secrets", async
   assert.ok(live.missing.includes("EDITORIAL_SEARCH_API_KEY"));
   assert.equal(live.issues[0].code, "LIVE_PROVIDER_UNAVAILABLE");
   assert.ok(!JSON.stringify(live).includes("sk-should-not-leak"));
+});
+
+test("Responses API uses stateless request format and the shared task normalizer", async () => {
+  assert.equal(resolveResponsesEndpoint("https://api.openai.com/v1"), "https://api.openai.com/v1/responses");
+  assert.equal(resolveResponsesEndpoint("https://api.openai.com/v1/responses"), "https://api.openai.com/v1/responses");
+  let requestBody: Record<string, unknown> = {};
+  const adapter = new OpenAIResponsesModelAdapter({
+    provider: "openai", baseUrl: "https://api.openai.com/v1", apiKey: "responses-canary", model: "test-model",
+    maxOutputTokens: 4096,
+    fetchImpl: async (url, init) => {
+      assert.equal(String(url), "https://api.openai.com/v1/responses");
+      assert.equal((init?.headers as Record<string, string>).authorization, "Bearer responses-canary");
+      requestBody = JSON.parse(String(init?.body));
+      assert.ok(!JSON.stringify(requestBody).includes("responses-canary"));
+      return Response.json({ status: "completed", output: [
+        { type: "reasoning", summary: [] },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: JSON.stringify(CANDIDATE_PAYLOAD) }] },
+      ] });
+    },
+  });
+  const result = await adapter.generateJson<{ candidates: Array<Record<string, unknown>> }>(
+    "editorial_candidate_discovery", { request: { date: "2026-01-25" }, tier: "A" });
+  assert.equal(requestBody.store, false);
+  assert.equal(requestBody.max_output_tokens, 4096);
+  assert.deepEqual(requestBody.text, { format: { type: "json_object" } });
+  assert.equal("temperature" in requestBody, false);
+  assert.equal(result.candidates[0].rank, undefined);
+  assert.equal(result.candidates[0].score, undefined);
+});
+
+test("Responses API refuses incomplete and refusal payloads without exposing upstream text", async () => {
+  for (const response of [
+    { status: "incomplete", output: [] },
+    { status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "refusal", refusal: "upstream-canary" }] }] },
+  ]) {
+    const adapter = new OpenAIResponsesModelAdapter({
+      provider: "openai", baseUrl: "https://api.openai.com/v1", apiKey: "test-key", model: "test-model",
+      fetchImpl: async () => Response.json(response),
+    });
+    await assert.rejects(() => adapter.generateJson("editorial_research_queries", {}),
+      (error: unknown) => error instanceof OrchestrationError &&
+        error.code === "LIVE_PROVIDER_INVALID_RESPONSE" && error.stage === "research" &&
+        !JSON.stringify(error.toJSON()).includes("upstream-canary"));
+  }
+});
+
+test("Responses configuration is explicit and mismatched endpoint is rejected", () => {
+  const env = {
+    EDITORIAL_PROVIDER_MODE: "live",
+    EDITORIAL_MODEL_PROTOCOL: "openai_responses",
+    EDITORIAL_MODEL_PROVIDER: "openai",
+    EDITORIAL_MODEL_BASE_URL: "https://api.openai.com/v1/responses",
+    EDITORIAL_MODEL_API_KEY: "test-key",
+    EDITORIAL_MODEL_NAME: "test-model",
+    EDITORIAL_SEARCH_PROTOCOL: "tavily",
+    EDITORIAL_SEARCH_PROVIDER: "tavily",
+    EDITORIAL_SEARCH_API_KEY: "test-search-key",
+  };
+  assert.equal(loadEditorialRuntimeConfig(env).model?.protocol, "openai_responses");
+  assert.equal(describeEditorialRuntime(env).ready, true);
+  assert.throws(() => loadEditorialRuntimeConfig({ ...env, EDITORIAL_MODEL_PROTOCOL: "openai_chat" }),
+    (error: unknown) => error instanceof OrchestrationError && error.code === "LIVE_PROVIDER_CONFIG_MISMATCH");
 });
