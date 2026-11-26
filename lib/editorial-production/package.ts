@@ -1,5 +1,6 @@
 import type {
   DailyEditorialPackage,
+  EditorialSelectionOverride,
   EditorialSelectionResult,
   ResearchPack,
 } from "../../types/editorial.ts";
@@ -21,11 +22,22 @@ export function assertDailyEditorialPackage(
     throw new Error("DailyEditorialPackage and all automated outputs must remain draft");
   }
   assertSelectionResult(result.selection);
+  const effectiveCandidate = result.editorOverride
+    ? result.selection.candidateShortlist.find(({ id }) => id === result.editorOverride?.selectedCandidateId)
+    : result.selection.selectedCandidate;
+  if (!effectiveCandidate) throw new Error("Editor override candidate must belong to the shortlist");
+  if (result.editorOverride && (
+    result.editorOverride.originalSelectedCandidateId !== result.selection.selectedCandidate.id ||
+    result.editorOverride.selectedCandidateId === result.selection.selectedCandidate.id ||
+    !result.editorOverride.reason.trim() ||
+    !Number.isFinite(Date.parse(result.editorOverride.overriddenAt))
+  )) {
+    throw new Error("Editor override must preserve and explain the original Selection decision");
+  }
   assertResearchPack(result.researchAudit);
   assertVerifiedEditorialContext(result.verifiedContext);
   const writerIds = [
-    result.selection.candidateShortlist[0].writer.id,
-    result.selection.selectedCandidate.writer.id,
+    effectiveCandidate.writer.id,
     result.researchAudit.writer.id,
     result.verifiedContext.writer.id,
     result.draft.writer.id,
@@ -37,8 +49,8 @@ export function assertDailyEditorialPackage(
   }
   if (
     result.date !== result.selection.date ||
-    result.researchAudit.candidateId !== result.selection.selectedCandidate.id ||
-    result.verifiedContext.candidateId !== result.selection.selectedCandidate.id
+    result.researchAudit.candidateId !== effectiveCandidate.id ||
+    result.verifiedContext.candidateId !== effectiveCandidate.id
   ) {
     throw new Error("DailyEditorialPackage stage identities do not match");
   }
@@ -69,10 +81,12 @@ export function assembleDailyEditorialPackage(
   valueModules: DailyEditorialPackage["valueModules"],
   draft: DailyEditorialPackage["draft"],
   review: DailyEditorialPackage["review"],
+  editorOverride?: EditorialSelectionOverride,
 ): DailyEditorialPackage {
   const result: DailyEditorialPackage = {
     date: selection.date,
     selection: structuredClone(selection),
+    ...(editorOverride ? { editorOverride: structuredClone(editorOverride) } : {}),
     researchAudit: structuredClone(researchAudit),
     verifiedContext: structuredClone(verifiedContext),
     valueModules: structuredClone(valueModules),

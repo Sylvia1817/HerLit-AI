@@ -1,5 +1,6 @@
 import type {
   EditorialRequest,
+  EditorialSelectionOverride,
   GroundedDraft,
   ResearchPack,
   ValueModuleCollection,
@@ -38,6 +39,7 @@ import type {
   ProductionResponse,
   ResearchResponse,
   ReviewResponse,
+  SessionResumeResponse,
 } from "./types.ts";
 
 function validateRequest(request: EditorialRequest): void {
@@ -102,20 +104,33 @@ export class EditorialWorkbenchService {
     }
   }
 
-  async research(input: { selectionId: string; candidateId: string; selection?: unknown }): Promise<ResearchResponse> {
+  async research(input: { selectionId: string; candidateId: string; overrideReason?: string; selection?: unknown }): Promise<ResearchResponse> {
     try {
       let stored;
       try { stored = this.store.getSelection(input.selectionId); } catch (error) { sessionError("research", error); }
       if (!stored) throw new OrchestrationError({ stage: "research", code: "SELECTION_SESSION_NOT_FOUND", message: "Selection session expired or is unknown", retryable: true }, 404);
       const candidate = stored.selection.candidateShortlist.find(({ id }) => id === input.candidateId);
       if (!candidate) throw new OrchestrationError({ stage: "research", code: "CANDIDATE_NOT_IN_SHORTLIST", message: "Research candidate must belong to the server shortlist", retryable: false }, 422);
+      let editorOverride: EditorialSelectionOverride | undefined;
       if (candidate.id !== stored.selection.selectedCandidate.id) {
-        throw new OrchestrationError({ stage: "research", code: "EDITOR_OVERRIDE_NOT_ENABLED", message: "This MVP currently researches the confirmed Today's Pick only", retryable: false }, 422);
+        const reason = typeof input.overrideReason === "string" ? input.overrideReason.trim() : "";
+        if (!reason) throw new OrchestrationError({ stage: "research", code: "EDITOR_OVERRIDE_REASON_REQUIRED", message: "Selecting a non-ranked-first candidate requires an editor reason", retryable: false }, 422);
+        editorOverride = {
+          originalSelectedCandidateId: stored.selection.selectedCandidate.id,
+          selectedCandidateId: candidate.id,
+          reason,
+          overriddenAt: new Date().toISOString(),
+        };
       }
       const provider = this.providers.createResearchProvider();
       const pack = await new ResearchVerificationEngine(provider).research(candidate);
-      const researchId = this.store.saveResearch({ selectionId: input.selectionId, pack, providerMode: this.mode });
-      return { ok: true, data: structuredClone(pack), meta: { researchId, selectionId: input.selectionId, providerMode: this.mode } };
+      const researchId = this.store.saveResearch({ selectionId: input.selectionId, pack, providerMode: this.mode, editorOverride });
+      return { ok: true, data: structuredClone(pack), meta: {
+        researchId,
+        selectionId: input.selectionId,
+        providerMode: this.mode,
+        ...(editorOverride ? { editorOverride: structuredClone(editorOverride) } : {}),
+      } };
     } catch (error) {
       throw asOrchestrationError("research", error);
     }
@@ -144,7 +159,7 @@ export class EditorialWorkbenchService {
       }
       const production = this.providers.createProductionProviders();
       const result = await new DailyEditorialProductionEngine(production.value, production.writer, production.review)
-        .produce(storedSelection.selection, storedResearch.pack, input.style);
+        .produce(storedSelection.selection, storedResearch.pack, input.style, storedResearch.editorOverride);
       const packageId = this.store.savePackage({ researchId: input.researchId, package: result, providerMode: this.mode });
       return { ok: true, data: structuredClone(result), meta: { packageId, researchId: input.researchId, providerMode: this.mode } };
     } catch (error) {
@@ -222,6 +237,63 @@ export class EditorialWorkbenchService {
       };
     } catch (error) {
       throw asOrchestrationError("review", error);
+    }
+  }
+
+  async resume(input: { selectionId: string; researchId?: string; packageId?: string }): Promise<SessionResumeResponse> {
+    try {
+      if (!input || typeof input.selectionId !== "string" || !input.selectionId ||
+        (input.researchId !== undefined && (typeof input.researchId !== "string" || !input.researchId)) ||
+        (input.packageId !== undefined && (typeof input.packageId !== "string" || !input.packageId || !input.researchId))) {
+        throw new OrchestrationError({ stage: "selection", code: "INVALID_SESSION_REQUEST", message: "Valid linked session IDs are required", retryable: false }, 422);
+      }
+      let selection;
+      let research;
+      let editorialPackage;
+      try {
+        selection = this.store.getSelection(input.selectionId);
+        research = input.researchId ? this.store.getResearch(input.researchId) : undefined;
+        editorialPackage = input.packageId ? this.store.getPackage(input.packageId) : undefined;
+      } catch (error) {
+        sessionError(input.packageId ? "review" : input.researchId ? "production" : "research", error);
+      }
+      if (!selection) throw new OrchestrationError({ stage: "selection", code: "SELECTION_SESSION_NOT_FOUND", message: "Selection session expired or is unknown", retryable: true }, 404);
+      if (input.researchId && (!research || research.selectionId !== input.selectionId)) {
+        throw new OrchestrationError({ stage: "research", code: "RESEARCH_SESSION_NOT_FOUND", message: "Research session expired or does not belong to this selection", retryable: true }, 404);
+      }
+      if (input.packageId && (!editorialPackage || !input.researchId || editorialPackage.researchId !== input.researchId)) {
+        throw new OrchestrationError({ stage: "review", code: "PACKAGE_SESSION_NOT_FOUND", message: "Package session expired or does not belong to this research", retryable: true }, 404);
+      }
+      const selectionMeta: CandidateApiMeta = {
+        selectionId: input.selectionId,
+        providerMode: selection.providerMode,
+        providerId: selection.providerId,
+        discoveryTrace: structuredClone(selection.discoveryTrace),
+      };
+      const snapshot = {
+        stage: editorialPackage ? "production" as const : research ? "research" as const : "selection" as const,
+        selection: structuredClone(selection.selection),
+        selectionMeta,
+        ...(research && input.researchId ? {
+          research: structuredClone(research.pack),
+          researchMeta: {
+            researchId: input.researchId,
+            selectionId: input.selectionId,
+            providerMode: research.providerMode,
+            ...(research.editorOverride ? { editorOverride: structuredClone(research.editorOverride) } : {}),
+          },
+        } : {}),
+        ...(editorialPackage && input.packageId && input.researchId ? {
+          editorialPackage: structuredClone(editorialPackage.package),
+          productionMeta: { packageId: input.packageId, researchId: input.researchId, providerMode: editorialPackage.providerMode },
+        } : {}),
+        humanReview: editorialPackage?.approval
+          ? structuredClone(editorialPackage.approval)
+          : editorialPackage ? { status: "ready_for_review" as const } : { status: "editing" as const },
+      };
+      return { ok: true, data: snapshot, meta: { providerMode: this.mode } };
+    } catch (error) {
+      throw asOrchestrationError("selection", error);
     }
   }
 }
