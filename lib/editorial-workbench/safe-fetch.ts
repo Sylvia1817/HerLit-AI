@@ -4,6 +4,7 @@ import { request as requestHttps } from "node:https";
 import { isIP } from "node:net";
 
 import { OrchestrationError } from "./errors.ts";
+import { decodeBody, htmlToText } from "./html-to-text.ts";
 
 export type FetchedSource = { url: string; contentType: string; text: string };
 export type BoundTransportRequest = { url: URL; address: string; timeoutMs: number };
@@ -178,7 +179,8 @@ export function createSafeSourceFetcher(options: SafeFetchOptions = {}) {
       if (!response.ok) {
         throw new OrchestrationError({ stage: "research", code: "SOURCE_FETCH_FAILED", message: `Source returned HTTP ${response.status}`, retryable: response.status >= 500 || response.status === 408 || response.status === 429 }, 422);
       }
-      const contentType = response.headers.get("content-type")?.split(";")[0].trim() ?? "";
+      const declaredContentType = response.headers.get("content-type") ?? "";
+      const contentType = declaredContentType.split(";")[0].trim();
       if (!new Set(["text/html", "text/plain", "application/xhtml+xml"]).has(contentType)) return reject(`Unsupported source content type ${contentType || "unknown"}`);
       const declared = Number(response.headers.get("content-length") ?? 0);
       if (declared > maxBytes) return reject("Source response exceeds size limit");
@@ -196,7 +198,11 @@ export function createSafeSourceFetcher(options: SafeFetchOptions = {}) {
       const body = new Uint8Array(total);
       let offset = 0;
       for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
-      return { url: url.toString(), contentType, text: new TextDecoder().decode(body) };
+      const decoded = decodeBody(body, declaredContentType);
+      const text = contentType === "text/html" || contentType === "application/xhtml+xml"
+        ? htmlToText(decoded)
+        : decoded.trim();
+      return { url: url.toString(), contentType, text };
     }
     return reject("Source redirect validation failed");
   };

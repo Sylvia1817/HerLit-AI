@@ -1,0 +1,56 @@
+{
+  "$comment": "HerLit 每日图文 content.json 模板。由内容作者（人工或 WorkBuddy 自动化）填写，再运行：npm run render:cards -- --from <本文件路径> [--background <封面背景图路径>]。所有事实字段（生卒年、作品年份、引言原文与出处）必须先经检索核验；cards 必须 3-6 张，第一张 role 必须是 cover。role 取值：cover / why_her_today / story / work / saveable_knowledge / reading_path / interaction / quote。quote 卡的 title 是署名（如 — Isabel Allende），source 是出处说明。",
+  "date": "2026-11-03",
+  "writer": {
+    "name": "伊莎贝尔·阿连德",
+    "originalName": "Isabel Allende",
+    "birthDate": "1942-08-02",
+    "deathDate": ""
+  },
+  "titles": [
+    { "text": "她把记忆写成河流", "style": "诗意" },
+    { "text": "今天记住伊莎贝尔·阿连德", "style": "直述" }
+  ],
+  "body": "正文将原样用于小红书发布文案。建议 200-400 字：开头一句话点出作家与今天的关联，中段讲她的写作与女性处境，结尾自然过渡到阅读入口。",
+  "hashtags": ["#HerLit", "#她文日历", "#女性作家", "#拉丁美洲文学"],
+  "readerHook": "你读小说时，更容易被故事打动，还是被某个女性角色留下来？",
+  "cards": [
+    {
+      "order": 1,
+      "role": "cover",
+      "title": "她把记忆\n写成河流",
+      "copy": "封面仅作兜底：通常以 title 为大标题、作家名为署名渲染。"
+    },
+    {
+      "order": 2,
+      "role": "why_her_today",
+      "title": "为什么是今天",
+      "copy": "1942 年的今天，她出生在利马。两句话说明这个日子与她的关联，以及为什么今天值得重读她。"
+    },
+    {
+      "order": 3,
+      "role": "story",
+      "title": "她的故事",
+      "copy": "三到五句讲述她的人生切面，只写核验过的事实，不虚构细节，不使用夸张修辞。"
+    },
+    {
+      "order": 4,
+      "role": "work",
+      "title": "代表作品",
+      "copy": "《幽灵之家》1982 ｜ 家族与历史\n《伊娃·卢娜》1987 ｜ 讲述的力量\n《宝拉》1994 ｜ 书信与记忆\n每行一部作品：书名 年份 ｜ 主题。年份必须核验。"
+    },
+    {
+      "order": 5,
+      "role": "quote",
+      "title": "— Isabel Allende",
+      "copy": "My most significant achievements are not my books, but the people I have loved.",
+      "source": "作者官网 Biography"
+    },
+    {
+      "order": 6,
+      "role": "reading_path",
+      "title": "从哪里读起",
+      "copy": "初读推荐《幽灵之家》；想读更私密、诚实的书信体，可以从《宝拉》开始。两三句给出明确、可执行的阅读入口。"
+    }
+  ]
+}

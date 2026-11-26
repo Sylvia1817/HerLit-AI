@@ -7,10 +7,8 @@ import type {
   ReaderValueProvider,
 } from "../editorial-production/contracts.ts";
 import type { EditorialRuntimeConfig } from "./config.ts";
-import {
-  HttpJsonModelAdapter,
-  HttpJsonSearchAdapter,
-} from "./live-adapters.ts";
+import { createModelAdapter } from "./live/model-adapters.ts";
+import { createSearchAdapter } from "./live/search-adapters.ts";
 import {
   LiveEditorialCandidateProvider,
   LiveEditorialReviewProvider,
@@ -60,8 +58,8 @@ export function createMockProviderFactory(): WorkbenchProviderFactory {
 
 export function createLiveProviderFactory(config: EditorialRuntimeConfig): WorkbenchProviderFactory {
   if (!config.model || !config.search) throw new Error("Live provider configuration is incomplete");
-  const model = new HttpJsonModelAdapter(config.model);
-  const search = new HttpJsonSearchAdapter(config.search);
+  const model = createModelAdapter(config.model);
+  const search = createSearchAdapter(config.search);
   return {
     mode: "live",
     createCandidateProvider: () => new LiveEditorialCandidateProvider(model),

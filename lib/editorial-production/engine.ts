@@ -1,5 +1,6 @@
 import type {
   DailyEditorialPackage,
+  EditorialSelectionOverride,
   EditorialSelectionResult,
   ResearchPack,
   WriterInput,
@@ -35,12 +36,25 @@ export class DailyEditorialProductionEngine {
     selection: EditorialSelectionResult,
     researchPack: ResearchPack,
     style?: string | null,
+    editorOverride?: EditorialSelectionOverride,
   ): Promise<DailyEditorialPackage> {
     assertSelectionResult(selection);
-    if (researchPack.candidateId !== selection.selectedCandidate.id) {
+    const selectedCandidate = editorOverride
+      ? selection.candidateShortlist.find(({ id }) => id === editorOverride.selectedCandidateId)
+      : selection.selectedCandidate;
+    if (!selectedCandidate) throw new Error("Editor override candidate must belong to the shortlist");
+    if (editorOverride && (
+      editorOverride.originalSelectedCandidateId !== selection.selectedCandidate.id ||
+      editorOverride.selectedCandidateId === selection.selectedCandidate.id ||
+      !editorOverride.reason.trim() ||
+      !Number.isFinite(Date.parse(editorOverride.overriddenAt))
+    )) {
+      throw new Error("Editor override must preserve and explain the original Selection decision");
+    }
+    if (researchPack.candidateId !== selectedCandidate.id) {
       throw new Error("ResearchPack must belong to the selected candidate");
     }
-    if (researchPack.writer.id !== selection.selectedCandidate.writer.id) {
+    if (researchPack.writer.id !== selectedCandidate.writer.id) {
       throw new Error("ResearchPack must belong to the selected writer");
     }
     const context = buildVerifiedEditorialContext(researchPack, selection.date);
@@ -64,6 +78,7 @@ export class DailyEditorialProductionEngine {
       valueModules,
       draft,
       review,
+      editorOverride,
     );
   }
 }

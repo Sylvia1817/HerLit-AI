@@ -1,4 +1,6 @@
 export * from "./config.ts";
+export * from "./diagnostics.ts";
+export * from "./html-to-text.ts";
 export * from "./errors.ts";
 export * from "./human-review.ts";
 export * from "./live-adapters.ts";

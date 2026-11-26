@@ -35,13 +35,18 @@ import type {
   LiveReviewPayload,
   LiveValuePayload,
   LiveWriterPayload,
+  SearchResult,
 } from "./live-adapters.ts";
+import { SOURCE_TYPES } from "./live/tasks.ts";
 import type { FetchedSource } from "./safe-fetch.ts";
 import { OrchestrationError } from "./errors.ts";
 
-const SOURCE_TYPES = new Set<ResearchSourceType>([
-  "official", "institution", "library", "publisher", "reputable_media", "secondary",
-]);
+/** Per-research retrieval budget: enough evidence, bounded context. */
+const MAX_SEARCH_RESULTS = 6;
+const MAX_SOURCES_PER_HOST = 2;
+const MAX_FETCHED_SOURCES = 5;
+const MAX_CHARS_PER_SOURCE = 12_000;
+const MAX_TOTAL_SOURCE_CHARS = 48_000;
 
 function assertSignals(signals: CandidateSignals): void {
   for (const [key, value] of Object.entries(signals)) {
@@ -49,6 +54,44 @@ function assertSignals(signals: CandidateSignals): void {
       throw new Error(`Live candidate signal ${key} must be between 0 and 100`);
     }
   }
+}
+
+/**
+ * Prefer source diversity over raw ranking: verification rewards independent
+ * publishers, and one host rarely yields two independent claims.
+ */
+function selectSourceCandidates(results: readonly SearchResult[]): SearchResult[] {
+  const perHost = new Map<string, number>();
+  const selected: SearchResult[] = [];
+  for (const result of results) {
+    if (selected.length >= MAX_FETCHED_SOURCES) break;
+    let host: string;
+    try {
+      host = new URL(result.url).hostname.toLocaleLowerCase();
+    } catch {
+      continue;
+    }
+    const used = perHost.get(host) ?? 0;
+    if (used >= MAX_SOURCES_PER_HOST) continue;
+    perHost.set(host, used + 1);
+    selected.push(result);
+  }
+  return selected;
+}
+
+function truncateSources(
+  fetched: ReadonlyArray<{ id: string; result: SearchResult; page: FetchedSource }>,
+): Array<{ id: string; result: SearchResult; page: FetchedSource; content: string }> {
+  let remaining = MAX_TOTAL_SOURCE_CHARS;
+  const output: Array<{ id: string; result: SearchResult; page: FetchedSource; content: string }> = [];
+  for (const entry of fetched) {
+    if (remaining <= 0) break;
+    const budget = Math.min(MAX_CHARS_PER_SOURCE, remaining);
+    const content = entry.page.text.slice(0, budget);
+    remaining -= content.length;
+    output.push({ ...entry, content });
+  }
+  return output;
 }
 
 export class LiveEditorialCandidateProvider implements EditorialCandidateProvider {
@@ -140,8 +183,9 @@ export class LiveResearchEvidenceProvider implements ResearchEvidenceProvider {
     const results = searchAttempts
       .flatMap((attempt) => attempt.status === "fulfilled" ? [...attempt.value] : [])
       .filter((result, index, all) => all.findIndex(({ url }) => url === result.url) === index)
-      .slice(0, 6);
-    const fetchAttempts = await Promise.allSettled(results.map(async (result, index) => ({
+      .slice(0, MAX_SEARCH_RESULTS);
+    const targets = selectSourceCandidates(results);
+    const fetchAttempts = await Promise.allSettled(targets.map(async (result, index) => ({
       id: `live-source-${index + 1}`,
       result,
       page: await this.fetchSource(result.url),
@@ -150,9 +194,10 @@ export class LiveResearchEvidenceProvider implements ResearchEvidenceProvider {
     const fetchSkips: SkippedResearchSource[] = fetchAttempts.flatMap((attempt, index) => {
       if (attempt.status === "fulfilled") return [];
       const reason = attempt.reason;
+      const target = targets[index];
       return [{
-        url: results[index].url,
-        title: results[index].title,
+        url: target?.url ?? "",
+        title: target?.title,
         code: reason instanceof OrchestrationError ? reason.code : "SOURCE_FETCH_FAILED",
         message: reason instanceof Error ? reason.message : "Source fetch failed",
         retryable: reason instanceof OrchestrationError ? reason.retryable : true,
@@ -172,12 +217,12 @@ export class LiveResearchEvidenceProvider implements ResearchEvidenceProvider {
       "editorial_claim_extraction",
       {
         candidate,
-        sources: fetched.map(({ id, result, page }) => ({
+        sources: truncateSources(fetched).map(({ id, result, page, content }) => ({
           sourceId: id,
           url: page.url,
           searchTitle: result.title,
           contentType: page.contentType,
-          content: page.text.slice(0, 60_000),
+          content,
         })),
         rules: "Extract only claims supported by supplied source IDs. Do not set verified, confidence, or readyForDraft.",
       },
