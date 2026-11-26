@@ -8,6 +8,7 @@
  *
  * - `openai_chat`      → POST {base}/chat/completions (OpenAI, DeepSeek,
  *                        Moonshot, Qwen, Zhipu, OpenRouter, vLLM, Ollama …)
+ * - `openai_responses` → POST {base}/responses (OpenAI Responses API)
  * - `anthropic_messages` → POST {base}/v1/messages
  * - `generic_json`     → the original HerLit JSON task protocol
  *
@@ -116,6 +117,15 @@ export function resolveOpenAIEndpoint(baseUrl: string): string {
   const url = new URL(trimmed);
   const path = url.pathname.replace(/\/+$/, "");
   if (path === "" || path === "/v1") return `${trimmed}/chat/completions`;
+  return trimmed;
+}
+
+export function resolveResponsesEndpoint(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/+$/, "");
+  if (/\/responses$/i.test(trimmed)) return trimmed;
+  const path = new URL(trimmed).pathname.replace(/\/+$/, "");
+  if (!path) return `${trimmed}/v1/responses`;
+  if (/\/v1$/i.test(path)) return `${trimmed}/responses`;
   return trimmed;
 }
 
@@ -320,6 +330,74 @@ export class OpenAIChatModelAdapter implements JsonModelAdapter {
   }
 }
 
+/** OpenAI Responses API; share normalization and repair with all model adapters. */
+export class OpenAIResponsesModelAdapter implements JsonModelAdapter {
+  readonly id: string;
+  readonly label: string;
+  private readonly endpoint: string;
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly timeoutMs: number;
+  private readonly maxAttempts: number;
+  private readonly jsonMode: JsonMode;
+  private readonly maxOutputTokens?: number;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(config: OpenAIChatConfig) {
+    this.id = config.provider;
+    this.label = `OpenAI Responses adapter ${config.provider}`;
+    this.endpoint = resolveResponsesEndpoint(config.baseUrl);
+    this.apiKey = config.apiKey;
+    this.model = config.model;
+    this.timeoutMs = config.timeoutMs ?? DEFAULT_MODEL_TIMEOUT_MS;
+    this.maxAttempts = config.maxAttempts ?? DEFAULT_ATTEMPTS;
+    this.jsonMode = config.jsonMode ?? "auto";
+    this.maxOutputTokens = config.maxOutputTokens;
+    this.fetchImpl = config.fetchImpl ?? fetch;
+  }
+
+  async generateJson<T>(task: string, input: unknown): Promise<T> {
+    if (!isModelTask(task)) throw invalidResponse(this.label, stageForTask(task), `does not implement task ${task}`);
+    return runStructuredTask<T>({
+      label: this.label,
+      task,
+      input,
+      maxAttempts: this.maxAttempts,
+      send: async (prompt) => {
+        const stage = stageForTask(task);
+        const response = await providerFetch(this.fetchImpl, this.endpoint, {
+          method: "POST",
+          headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            model: this.model,
+            instructions: prompt.system,
+            input: prompt.user,
+            store: false,
+            max_output_tokens: this.maxOutputTokens ?? taskOutputBudget(task),
+            ...(this.jsonMode === "off" ? {} : { text: { format: { type: "json_object" } } }),
+          }),
+          signal: AbortSignal.timeout(this.timeoutMs),
+        }, this.label, stage);
+        const payload = record(await readJsonResponse(response, this.label, stage));
+        if (payload.status !== "completed") {
+          throw invalidResponse(this.label, stage, "did not complete the response");
+        }
+        const output = Array.isArray(payload.output) ? payload.output.map(record) : [];
+        const content = output
+          .filter((item) => item.type === "message" && item.role === "assistant")
+          .flatMap((item) => Array.isArray(item.content) ? item.content.map(record) : []);
+        if (content.some((item) => item.type === "refusal")) {
+          throw invalidResponse(this.label, stage, "refused the structured task");
+        }
+        const text = content.filter((item) => item.type === "output_text" && typeof item.text === "string")
+          .map((item) => textOf(item.text)).join("");
+        if (!text.trim()) throw invalidResponse(this.label, stage, "returned no assistant output text");
+        return text;
+      },
+    });
+  }
+}
+
 export type AnthropicMessagesConfig = HttpJsonModelConfig & {
   maxOutputTokens?: number;
 };
@@ -395,6 +473,8 @@ export function createModelAdapter(config: EditorialModelConfig): JsonModelAdapt
       return new HttpJsonModelAdapter(config);
     case "openai_chat":
       return new OpenAIChatModelAdapter(config);
+    case "openai_responses":
+      return new OpenAIResponsesModelAdapter(config);
     case "anthropic_messages":
       return new AnthropicMessagesModelAdapter(config);
     default: {

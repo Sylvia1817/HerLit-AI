@@ -1,7 +1,7 @@
 import { OrchestrationError } from "./errors.ts";
 import type { EditorialProviderMode } from "./types.ts";
 
-export const MODEL_PROTOCOLS = ["generic_json", "openai_chat", "anthropic_messages"] as const;
+export const MODEL_PROTOCOLS = ["generic_json", "openai_chat", "openai_responses", "anthropic_messages"] as const;
 export type ModelProtocol = (typeof MODEL_PROTOCOLS)[number];
 
 export const SEARCH_PROTOCOLS = ["generic_json", "brave", "tavily", "serper"] as const;
@@ -57,7 +57,7 @@ function assertProtocolMatchesBaseUrl(
   expected: string,
 ): void {
   if (protocol !== "generic_json") return;
-  const looksVendorSpecific = /\/(chat\/completions|completions|messages|v1|v1\/messages)$/i.test(baseUrl) ||
+  const looksVendorSpecific = /\/(chat\/completions|completions|responses|messages|v1|v1\/messages)$/i.test(baseUrl) ||
     /api\.(openai|anthropic|deepseek|moonshot|tavily|brave)\./i.test(baseUrl) ||
     /google\.serper\.dev/i.test(baseUrl);
   if (!looksVendorSpecific) return;
@@ -112,7 +112,15 @@ export function loadEditorialRuntimeConfig(env: NodeJS.ProcessEnv = process.env)
   const searchProtocol = protocolFrom("EDITORIAL_SEARCH_PROTOCOL", SEARCH_PROTOCOLS, "generic_json");
 
   const modelBaseUrl = required("EDITORIAL_MODEL_BASE_URL");
-  assertProtocolMatchesBaseUrl(modelProtocol, modelBaseUrl, "EDITORIAL_MODEL_PROTOCOL", "openai_chat");
+  assertProtocolMatchesBaseUrl(modelProtocol, modelBaseUrl, "EDITORIAL_MODEL_PROTOCOL", /\/responses\/?$/i.test(modelBaseUrl) ? "openai_responses" : "openai_chat");
+  const modelPath = (() => {
+    try { return new URL(modelBaseUrl).pathname.replace(/\/+$/, ""); }
+    catch { throw new OrchestrationError({ stage: "selection", code: "LIVE_PROVIDER_CONFIG_INVALID", message: "EDITORIAL_MODEL_BASE_URL must be a valid URL", retryable: false }, 503); }
+  })();
+  if ((modelProtocol === "openai_chat" && /\/responses$/i.test(modelPath)) ||
+      (modelProtocol === "openai_responses" && /\/(chat\/completions|messages)$/i.test(modelPath))) {
+    throw new OrchestrationError({ stage: "selection", code: "LIVE_PROVIDER_CONFIG_MISMATCH", message: "EDITORIAL_MODEL_PROTOCOL does not match the configured endpoint", retryable: false }, 503);
+  }
 
   const searchBaseUrl = read("EDITORIAL_SEARCH_BASE_URL") ?? "";
   if (searchProtocol === "generic_json" && !searchBaseUrl) throw missing("EDITORIAL_SEARCH_BASE_URL");

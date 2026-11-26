@@ -44,6 +44,22 @@ jobs:
       - name: Build and run tests
         run: npm test
 
+  dependency-audit:
+    name: Dependency advisory inventory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Inventory npm advisories without modifying dependencies
+        run: npm run audit:deps
+
   browser:
     name: Browser approval flow
     # Playwright 1.56.1 supports Ubuntu 24.04, not the new ubuntu-latest (26.04).
